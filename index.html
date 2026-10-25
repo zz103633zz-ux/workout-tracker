@@ -120,6 +120,7 @@ function e1rm(w,r){return r>0&&w>0?(r===1?w:w*(1+r/30)):0}
 function setDone(s){return s.done&&(+s.r>0)}
 function wVol(w){let v=0,n=0;w.ex.forEach(e=>e.sets.forEach(s=>{if(setDone(s)&&s.t!=='W'){v+=(+s.w||0)*(+s.r||0);n++}}));return{v,n}}
 function weekStart(ts){const d=new Date(ts);d.setHours(0,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7));return d.getTime()}
+function wDur(w){return w.dur!=null?w.dur:((w.end||w.start)-w.start)}
 function sorted(){return S.workouts.slice().sort((a,b)=>b.start-a.start)}
 // ---------- tabs ----------
 let tab='home',libFilter='全部',libQ='',calM=null;
@@ -147,8 +148,8 @@ function vHome(){
  <h2>工具</h2>
  <div class="row" style="gap:8px;margin-bottom:12px"><button class="btn full" onclick="bwModal()">⚖️ 體重${bwl?' '+bwl.v+U():''}</button><button class="btn full" onclick="plateModal()">🧮 槓片計算</button></div>
  <h2>最近訓練</h2>${last.length?last.map(wCard).join(''):'<div class="card muted small">還沒有紀錄，開始第一次訓練吧！</div>'}`}
-function wCard(w){const{v,n}=wVol(w);return`<div class="card" onclick="viewWorkout('${w.id}')"><div class="row"><b>${esc(w.name)}</b><span class="sp"></span><span class="tiny">${dstr(w.start)}</span></div>
- <div class="small muted" style="margin:6px 0">⏱ ${fmtDurZh((w.end||w.start)-w.start)}　🏋️ ${kfmt(v)} ${U()}　✅ ${n} 組${w.prs?'　🏆 '+w.prs:''}</div>
+function wCard(w){const{v,n}=wVol(w);const sel=selMode&&selIds.includes(w.id);return`<div class="card" style="${sel?'outline:2px solid var(--ac)':''}" onclick="${selMode?`toggleSel('${w.id}')`:`viewWorkout('${w.id}')`}">${selMode?`<div class="tiny" style="color:var(--ac)">${sel?'☑︎ 已選取':'☐ 點選以選取'}</div>`:''}<div class="row"><b>${esc(w.name)}</b><span class="sp"></span><span class="tiny">${dstr(w.start)}</span></div>
+ <div class="small muted" style="margin:6px 0">⏱ ${fmtDurZh(wDur(w))}　🏋️ ${kfmt(v)} ${U()}　✅ ${n} 組${w.prs?'　🏆 '+w.prs:''}</div>
  <div class="small">${w.ex.map(e=>`${esc(exById(e.id).name)} × ${e.sets.filter(setDone).length}`).join('<br>')}</div></div>`}
 function vHist(){
  const now=new Date();if(!calM)calM=new Date(now.getFullYear(),now.getMonth(),1).getTime();
@@ -158,7 +159,19 @@ function vHist(){
  for(let d=1;d<=nd;d++){const k=dkey(new Date(y,mo,d));cells+=`<div class="${set.has(k)?'w':''} ${k===dkey(Date.now())?'td':''}">${d}</div>`}
  const inM=sorted().filter(w=>{const d=new Date(w.start);return d.getFullYear()===y&&d.getMonth()===mo});
  return`<h1>歷史紀錄</h1><div class="card"><div class="row" style="margin-bottom:8px"><button class="btn sm" onclick="calM=new Date(${y},${mo-1},1).getTime();render()">‹</button><b class="sp" style="text-align:center">${y} 年 ${mo+1} 月　<span class="muted small">${inM.length} 次</span></b><button class="btn sm" onclick="calM=new Date(${y},${mo+1},1).getTime();render()">›</button></div><div class="cal">${cells}</div></div>
- ${inM.map(wCard).join('')||'<div class="muted small" style="padding:8px">本月沒有紀錄</div>'}`}
+ <div class="row" style="margin-bottom:10px;gap:8px">${selMode?`<button class="btn sm pri" onclick="mergeIds(selIds)">🔗 合併所選（${selIds.length}）</button><button class="btn sm" onclick="selMode=false;selIds=[];render()">取消</button>`:`<span class="sp"></span><button class="btn sm" onclick="selMode=true;selIds=[];render()">選取合併</button>`}</div>
+ ${(()=>{const g={};inM.forEach(w=>(g[dkey(w.start)]=g[dkey(w.start)]||[]).push(w));return Object.keys(g).sort().reverse().map(k=>(g[k].length>1&&!selMode?`<button class="btn sm full" style="margin-bottom:8px;color:var(--ac)" onclick="mergeDay('${k}')">🔗 合併當日訓練（${k.slice(5).replace('-','/')}，${g[k].length} 筆）</button>`:'')+g[k].map(wCard).join('')).join('')})()||'<div class="muted small" style="padding:8px">本月沒有紀錄</div>'}`}
+let selMode=false,selIds=[];
+function toggleSel(id){selIds=selIds.includes(id)?selIds.filter(x=>x!==id):selIds.concat(id);render()}
+function mergeDay(k){mergeIds(S.workouts.filter(w=>dkey(w.start)===k).map(w=>w.id))}
+function mergeIds(ids){const ws=S.workouts.filter(w=>ids.includes(w.id)).sort((a,b)=>a.start-b.start);if(ws.length<2)return toast('請選擇至少 2 筆訓練');
+ if(!confirm(`確定把這 ${ws.length} 筆訓練合併成一筆？`))return;
+ const backup=JSON.stringify(S.workouts);const m=JSON.parse(JSON.stringify(ws[0]));
+ m.name=[...new Set(ws.map(w=>w.name))].join('＋');m.start=ws[0].start;m.end=Math.max(...ws.map(w=>w.end||w.start));m.dur=ws.reduce((a,w)=>a+wDur(w),0);m.ex=[];
+ ws.forEach(w=>w.ex.forEach(e=>{const c=JSON.parse(JSON.stringify(e)),f=m.ex.find(x=>x.id===c.id);if(f){f.sets=f.sets.concat(c.sets);if(c.note)f.note=[f.note,c.note].filter(Boolean).join('／')}else m.ex.push(c)}));
+ S.workouts=S.workouts.filter(w=>!ids.includes(w.id));S.workouts.push(m);S.workouts.forEach(w=>w.prs=countPRs(w));save();selMode=false;selIds=[];render();
+ undoToast('已合併 '+ws.length+' 筆訓練',()=>{S.workouts=JSON.parse(backup);save();render();toast('已復原')})}
+function undoToast(msg,fn){const t=$('toast');t.style.pointerEvents='auto';t.innerHTML=esc(msg)+' · <button style="color:var(--ac);font-weight:700;padding:4px 8px" id="undob">復原</button>';t.style.display='block';$('undob').onclick=()=>{t.style.display='none';fn()};clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',8000)}
 function vLib(){
  const q=libQ.trim().toLowerCase();const list=allEx().filter(e=>(libFilter==='全部'||e.part===libFilter||(libFilter==='自訂'&&e.custom))&&(!q||e.name.toLowerCase().includes(q)));
  return`<h1>動作庫</h1><div class="row" style="margin-bottom:10px"><input id="libq" placeholder="🔍 搜尋動作" value="${esc(libQ)}" oninput="libQ=this.value;libList()"><button class="btn pri" onclick="customExModal()">＋自訂</button></div>
@@ -178,7 +191,7 @@ function vSet(){const st=S.settings;return`<h1>設定</h1><div class="card">
  <button class="btn full" style="margin-bottom:8px" onclick="$('imp').click()">⬆️ 匯入備份</button><input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importJSON(this)">
  <button class="btn full" style="margin-bottom:8px" onclick="exportCSV()">📊 匯出 CSV（Excel 可開）</button>
  <button class="btn bad full" onclick="if(confirm('確定刪除所有資料？無法復原！')&&confirm('真的確定？')){localStorage.removeItem('${KEY}');load();render()}">🗑 清除全部資料</button></div>
- <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.2 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
+ <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.3 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
 function download(name,text,type){const b=new Blob([text],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
 function exportJSON(){download('workout-backup-'+dkey(Date.now())+'.json',JSON.stringify(S,null,1),'application/json');toast('已匯出備份')}
 function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.workouts))throw 0;if(!confirm('匯入會覆蓋目前資料，確定？'))return;localStorage.setItem(KEY,JSON.stringify(d));load();render();toast('匯入成功')}catch(e){alert('檔案格式錯誤')}};r.readAsText(f);inp.value=''}
@@ -215,7 +228,8 @@ function pickDone(id){const cb=pickCb;pickCb=null;closeModal();cb&&cb(id)}
 // ---------- workout ----------
 let editW=null;// editing past workout copy
 const cur=()=>editW||S.active;
-function startWorkout(tid){if(S.active){if(!confirm('已有進行中的訓練，要放棄並開新的嗎？'))return openWorkout()}
+function startWorkout(tid,force){const td=sorted().find(w=>dkey(w.start)===dkey(Date.now()));if(!S.active&&!force&&td){modal(`<h2 style="margin-top:0">今天已經有一筆訓練</h2><p class="muted small" style="margin-bottom:12px">要接著記在「${esc(td.name)}」，還是開新的？</p><button class="btn pri full" style="margin-bottom:8px" onclick="closeModal();resumeWorkout('${td.id}')">接著記</button><button class="btn full" style="margin-bottom:8px" onclick="closeModal();startWorkout(${tid?`'${tid}'`:'undefined'},true)">開新的</button><button class="btn full" onclick="closeModal()">取消</button>`);return}
+ if(S.active){if(!confirm('已有進行中的訓練，要放棄並開新的嗎？'))return openWorkout()}
  const t=S.templates.find(x=>x.id===tid);const hr=new Date().getHours();
  S.active={id:uid(),name:t?t.name:(hr<11?'早晨訓練':hr<17?'午間訓練':'晚間訓練'),start:Date.now(),ex:[]};
  if(t)t.ex.forEach(e=>{const prev=lastSets(e.id);S.active.ex.push({id:e.id,sets:[...Array(Math.max(1,e.n))].map((_,i)=>({w:e.w||(prev[i]||prev[prev.length-1]||{}).w||'',r:e.r||'',t:'N',done:false}))})});
@@ -288,7 +302,7 @@ function prList(w){const out=[];w.ex.forEach(e=>{const h=exHist(e.id,w.id).filte
 function countPRs(w){return prList(w).length}
 function resumeWorkout(id){const w=S.workouts.find(x=>x.id===id);if(!w)return;
  if(S.active&&S.active.id!==id&&!confirm('目前有進行中的訓練，繼續這筆會放棄目前那筆（未完成的不會保存）。確定？'))return;
- S.workouts=S.workouts.filter(x=>x.id!==id);delete w.end;delete w.prs;S.active=w;S.rest=null;editW=null;save();render();openWorkout();toast('已回到訓練，可繼續編輯')}
+ S.workouts=S.workouts.filter(x=>x.id!==id);delete w.end;delete w.prs;delete w.dur;S.active=w;S.rest=null;editW=null;save();render();openWorkout();toast('已回到訓練，可繼續編輯')}
 function viewWorkout(id){const w=S.workouts.find(x=>x.id===id);if(!w)return;editW=JSON.parse(JSON.stringify(w));openWorkout()}
 function saveAsTpl(wid){const w=S.workouts.find(x=>x.id===wid);if(!w)return;const n=prompt('課表名稱',w.name);if(!n)return;
  S.templates.push({id:uid(),name:n,ex:w.ex.map(e=>{const s=e.sets.filter(x=>x.t!=='W');const l=s[s.length-1]||e.sets[0]||{};return{id:e.id,n:Math.max(1,s.length),w:+l.w||0,r:+l.r||0}})});save();closeModal();toast('已存成課表');render()}

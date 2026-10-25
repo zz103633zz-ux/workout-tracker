@@ -178,7 +178,7 @@ function vSet(){const st=S.settings;return`<h1>設定</h1><div class="card">
  <button class="btn full" style="margin-bottom:8px" onclick="$('imp').click()">⬆️ 匯入備份</button><input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importJSON(this)">
  <button class="btn full" style="margin-bottom:8px" onclick="exportCSV()">📊 匯出 CSV（Excel 可開）</button>
  <button class="btn bad full" onclick="if(confirm('確定刪除所有資料？無法復原！')&&confirm('真的確定？')){localStorage.removeItem('${KEY}');load();render()}">🗑 清除全部資料</button></div>
- <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.1 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
+ <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.2 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
 function download(name,text,type){const b=new Blob([text],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
 function exportJSON(){download('workout-backup-'+dkey(Date.now())+'.json',JSON.stringify(S,null,1),'application/json');toast('已匯出備份')}
 function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.workouts))throw 0;if(!confirm('匯入會覆蓋目前資料，確定？'))return;localStorage.setItem(KEY,JSON.stringify(d));load();render();toast('匯入成功')}catch(e){alert('檔案格式錯誤')}};r.readAsText(f);inp.value=''}
@@ -229,7 +229,7 @@ function rWk(){const w=cur();if(!w)return minimize();const live=!editW;
  ${live?'':`<div class="row small muted" style="margin:4px 0 8px">開始時間 <input type="datetime-local" style="width:auto" value="${new Date(w.start-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16)}" onchange="const d=cur().end-cur().start;cur().start=new Date(this.value).getTime();cur().end=cur().start+d"></div>`}
  ${w.ex.map((e,ei)=>exBlock(e,ei,w)).join('')}
  <button class="btn pri full" style="margin:6px 0 10px" onclick="pickEx(id=>{cur().ex.push({id,sets:[{w:'',r:'',t:'N',done:false}]});persist();rWk()})">＋ 新增動作</button>
- ${live?`<button class="btn bad full" onclick="if(confirm('放棄這次訓練？紀錄不會保存。')){S.active=null;S.rest=null;save();minimize();rRest()}">放棄訓練</button>`:`<button class="btn bad full" onclick="if(confirm('刪除這筆訓練紀錄？')){S.workouts=S.workouts.filter(x=>x.id!==editW.id);save();editW=null;minimize()}">🗑 刪除此紀錄</button>`}`;rRest()}
+ ${live?`<button class="btn bad full" onclick="if(confirm('放棄這次訓練？紀錄不會保存。')){S.active=null;S.rest=null;save();minimize();rRest()}">放棄訓練</button>`:`<button class="btn full" style="margin-bottom:8px" onclick="resumeWorkout(editW.id)">▶️ 繼續這次訓練</button><button class="btn bad full" onclick="if(confirm('刪除這筆訓練紀錄？')){S.workouts=S.workouts.filter(x=>x.id!==editW.id);save();editW=null;minimize()}">🗑 刪除此紀錄</button>`}`;rRest()}
 function exBlock(e,ei,w){const ex=exById(e.id),prev=lastSets(e.id,w.id);let wn=0;
  return`<div class="ex"><div class="ex-h"><span class="t" onclick="statsModal('${e.id}')">${esc(ex.name)}</span>
  <button class="btn sm" onclick="moveEx(${ei},-1)">↑</button><button class="btn sm" onclick="exMenu(${ei})">⋯</button></div>
@@ -272,19 +272,23 @@ function finishWorkout(){const w=cur();
  if(editW){const i=S.workouts.findIndex(x=>x.id===w.id);w.prs=countPRs(w);if(i>=0)S.workouts[i]=w;save();editW=null;toast('已儲存');minimize();return}
  const done=w.ex.reduce((a,e)=>a+e.sets.filter(setDone).length,0);
  if(!done){if(confirm('沒有完成任何一組，要放棄這次訓練嗎？')){S.active=null;S.rest=null;save();minimize()}return}
- if(w.ex.some(e=>e.sets.some(s=>!setDone(s)))&&!confirm('還有未完成的組，未勾選的組不會計入。確定完成？'))return;
- w.end=Date.now();w.ex.forEach(e=>e.sets=e.sets.filter(setDone));w.ex=w.ex.filter(e=>e.sets.length);
+ const und=w.ex.reduce((a,e)=>a+e.sets.filter(s=>!setDone(s)).length,0);
+ if(!confirm(und?`確定要完成這次訓練嗎？\n還有 ${und} 組未勾選，未勾選的組不會計入統計。`:'確定要完成這次訓練嗎？'))return;
+ w.end=Date.now();delete w.prs;
  const prl=prList(w);w.prs=prl.length;S.workouts.push(w);S.active=null;S.rest=null;save();rRest();$('wk').classList.remove('on');document.body.style.overflow='';render();
  const{v,n}=wVol(w);
  modal(`<div style="text-align:center;font-size:48px">🎉</div><h2 style="text-align:center;margin-top:4px">訓練完成！</h2><div style="text-align:center" class="muted small">${esc(w.name)} · ${dstr(w.start)}</div>
  <div class="stats" style="margin:14px 0"><div class="stat"><b class="num">${fmtDurZh(w.end-w.start)}</b><span>時間</span></div><div class="stat"><b class="num">${kfmt(v)}</b><span>總量 ${U()}</span></div><div class="stat"><b class="num">${n}</b><span>組數</span></div></div>
  ${prl.length?`<div class="card"><b>🏆 新個人紀錄 ×${prl.length}</b>${prl.map(p=>`<div class="small" style="margin-top:6px">${p}</div>`).join('')}</div>`:''}
  <div class="small">${w.ex.map(e=>{const b=e.sets.reduce((a,s)=>e1rm(+s.w,+s.r)>e1rm(+a.w,+a.r)?s:a,e.sets[0]);return`${esc(exById(e.id).name)}：${e.sets.length} 組，最佳 ${b.w}×${b.r}`}).join('<br>')}</div>
- <div class="row" style="margin-top:14px;gap:8px"><button class="btn full" onclick="saveAsTpl('${w.id}')">存成課表</button><button class="btn pri full" onclick="closeModal()">好</button></div>`)}
+ <button class="btn full" style="margin-top:14px" onclick="closeModal();resumeWorkout('${w.id}')">↩️ 回去繼續訓練</button><div class="row" style="margin-top:8px;gap:8px"><button class="btn full" onclick="saveAsTpl('${w.id}')">存成課表</button><button class="btn pri full" onclick="closeModal()">好</button></div>`)}
 function prList(w){const out=[];w.ex.forEach(e=>{const h=exHist(e.id,w.id).filter(x=>x.t<w.start);if(!h.length)return;const pe=Math.max(...h.map(x=>x.e1)),pw=Math.max(...h.map(x=>x.bw)),pv=Math.max(...h.map(x=>x.vol));
  let me=0,mw=0,mv=0;e.sets.filter(setDone).forEach(s=>{me=Math.max(me,e1rm(+s.w,+s.r));mw=Math.max(mw,+s.w||0);if(s.t!=='W')mv+=(+s.w||0)*(+s.r||0)});
  const n=esc(exById(e.id).name);if(mw>pw)out.push(`${n} 最大重量 ${mw} ${U()}`);if(me>pe+0.01)out.push(`${n} 預估 1RM ${nf(me)} ${U()}`);if(mv>pv)out.push(`${n} 單次總量 ${kfmt(mv)} ${U()}`)});return out}
 function countPRs(w){return prList(w).length}
+function resumeWorkout(id){const w=S.workouts.find(x=>x.id===id);if(!w)return;
+ if(S.active&&S.active.id!==id&&!confirm('目前有進行中的訓練，繼續這筆會放棄目前那筆（未完成的不會保存）。確定？'))return;
+ S.workouts=S.workouts.filter(x=>x.id!==id);delete w.end;delete w.prs;S.active=w;S.rest=null;editW=null;save();render();openWorkout();toast('已回到訓練，可繼續編輯')}
 function viewWorkout(id){const w=S.workouts.find(x=>x.id===id);if(!w)return;editW=JSON.parse(JSON.stringify(w));openWorkout()}
 function saveAsTpl(wid){const w=S.workouts.find(x=>x.id===wid);if(!w)return;const n=prompt('課表名稱',w.name);if(!n)return;
  S.templates.push({id:uid(),name:n,ex:w.ex.map(e=>{const s=e.sets.filter(x=>x.t!=='W');const l=s[s.length-1]||e.sets[0]||{};return{id:e.id,n:Math.max(1,s.length),w:+l.w||0,r:+l.r||0}})});save();closeModal();toast('已存成課表');render()}

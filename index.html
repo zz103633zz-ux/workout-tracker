@@ -66,6 +66,11 @@ svg text{fill:var(--tx3);font-size:10px}
 .field{margin-bottom:10px}.field label{display:block;font-size:13px;color:var(--tx2);margin:0 2px 4px}
 .plates{display:flex;align-items:center;justify-content:center;gap:3px;min-height:110px}
 .plate{border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;writing-mode:vertical-rl}
+.wcard{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;position:relative;transition:transform .15s}
+.wcard.dsrc{opacity:.35}.wcard.dtgt{outline:3px solid #ff9f0a!important;outline-offset:2px}
+.wcard.dtgt::after{content:'放開即合併';position:absolute;top:8px;right:8px;background:#ff9f0a;color:#111;font-size:12px;font-weight:700;padding:3px 8px;border-radius:10px}
+.dghost{position:fixed;z-index:9999;pointer-events:none;opacity:.92;transform:scale(1.03) rotate(-1deg);box-shadow:0 12px 30px rgba(0,0,0,.5);margin:0!important}
+body.dragging{overflow:hidden;touch-action:none}
 </style>
 </head>
 <body>
@@ -150,8 +155,8 @@ function vHome(){
  <div class="chips">${S.templates.map(t=>`<button class="chip" onclick="startWorkout('${t.id}')">${esc(t.name)}</button>`).join('')||'<span class="muted small">尚無課表</span>'}</div>
  <h2>工具</h2>
  <div class="row" style="gap:8px;margin-bottom:12px"><button class="btn full" onclick="bwModal()">⚖️ 體重${bwl?' '+bwl.v+U():''}</button><button class="btn full" onclick="plateModal()">🧮 槓片計算</button></div>
- <h2>最近訓練</h2>${last.length?last.map(wCard).join(''):'<div class="card muted small">還沒有紀錄，開始第一次訓練吧！</div>'}`}
-function wCard(w){const{v,n}=wVol(w);const sel=selMode&&selIds.includes(w.id);return`<div class="card" style="${sel?'outline:2px solid var(--ac)':''}" onclick="${selMode?`toggleSel('${w.id}')`:`viewWorkout('${w.id}')`}">${selMode?`<div class="tiny" style="color:var(--ac)">${sel?'☑︎ 已選取':'☐ 點選以選取'}</div>`:''}<div class="row"><b>${esc(w.name)}</b><span class="sp"></span><span class="tiny">${dstr(w.start)}</span></div>
+ <h2>最近訓練</h2>${last.length>1?dragHint():''}${last.length?last.map(wCard).join(''):'<div class="card muted small">還沒有紀錄，開始第一次訓練吧！</div>'}`}
+function wCard(w){const{v,n}=wVol(w);const sel=selMode&&selIds.includes(w.id);return`<div class="card wcard" data-wid="${w.id}" style="${sel?'outline:2px solid var(--ac)':''}" onclick="${selMode?`toggleSel('${w.id}')`:`viewWorkout('${w.id}')`}">${selMode?`<div class="tiny" style="color:var(--ac)">${sel?'☑︎ 已選取':'☐ 點選以選取'}</div>`:''}<div class="row"><b>${esc(w.name)}</b><span class="sp"></span><span class="tiny">${dstr(w.start)}</span></div>
  <div class="small muted" style="margin:6px 0">⏱ ${fmtDurZh(wDur(w))}　🏋️ ${kfmt(v)} ${U()}　✅ ${n} 組${w.prs?'　🏆 '+w.prs:''}</div>
  <div class="small">${(g=>w.ex.map((e,i)=>`${g[i]?`<b style="color:${g[i].c}">${g[i].L}${g[i].i}</b> `:''}${esc(exById(e.id).name)} × ${e.sets.filter(setDone).length}`).join('<br>'))(gInfo(w.ex))}</div></div>`}
 function vHist(){
@@ -162,13 +167,13 @@ function vHist(){
  for(let d=1;d<=nd;d++){const k=dkey(new Date(y,mo,d));cells+=`<div class="${set.has(k)?'w':''} ${k===dkey(Date.now())?'td':''}">${d}</div>`}
  const inM=sorted().filter(w=>{const d=new Date(w.start);return d.getFullYear()===y&&d.getMonth()===mo});
  return`<h1>歷史紀錄</h1><div class="card"><div class="row" style="margin-bottom:8px"><button class="btn sm" onclick="calM=new Date(${y},${mo-1},1).getTime();render()">‹</button><b class="sp" style="text-align:center">${y} 年 ${mo+1} 月　<span class="muted small">${inM.length} 次</span></b><button class="btn sm" onclick="calM=new Date(${y},${mo+1},1).getTime();render()">›</button></div><div class="cal">${cells}</div></div>
- <div class="row" style="margin-bottom:10px;gap:8px">${selMode?`<button class="btn sm pri" onclick="mergeIds(selIds)">🔗 合併所選（${selIds.length}）</button><button class="btn sm" onclick="selMode=false;selIds=[];render()">取消</button>`:`<span class="sp"></span><button class="btn sm" onclick="selMode=true;selIds=[];render()">選取合併</button>`}</div>
+ ${inM.length>1&&!selMode?dragHint():''}<div class="row" style="margin-bottom:10px;gap:8px">${selMode?`<button class="btn sm pri" onclick="mergeIds(selIds)">🔗 合併所選（${selIds.length}）</button><button class="btn sm" onclick="selMode=false;selIds=[];render()">取消</button>`:`<span class="sp"></span><button class="btn sm" onclick="selMode=true;selIds=[];render()">選取合併</button>`}</div>
  ${(()=>{const g={};inM.forEach(w=>(g[dkey(w.start)]=g[dkey(w.start)]||[]).push(w));return Object.keys(g).sort().reverse().map(k=>(g[k].length>1&&!selMode?`<button class="btn sm full" style="margin-bottom:8px;color:var(--ac)" onclick="mergeDay('${k}')">🔗 合併當日訓練（${k.slice(5).replace('-','/')}，${g[k].length} 筆）</button>`:'')+g[k].map(wCard).join('')).join('')})()||'<div class="muted small" style="padding:8px">本月沒有紀錄</div>'}`}
 let selMode=false,selIds=[];
 function toggleSel(id){selIds=selIds.includes(id)?selIds.filter(x=>x!==id):selIds.concat(id);render()}
 function mergeDay(k){mergeIds(S.workouts.filter(w=>dkey(w.start)===k).map(w=>w.id))}
-function mergeIds(ids){const ws=S.workouts.filter(w=>ids.includes(w.id)).sort((a,b)=>a.start-b.start);if(ws.length<2)return toast('請選擇至少 2 筆訓練');
- if(!confirm(`確定把這 ${ws.length} 筆訓練合併成一筆？`))return;
+function mergeIds(ids,cmsg){const ws=S.workouts.filter(w=>ids.includes(w.id)).sort((a,b)=>a.start-b.start);if(ws.length<2)return toast('請選擇至少 2 筆訓練');
+ if(!confirm(cmsg||`確定把這 ${ws.length} 筆訓練合併成一筆？`))return;
  const backup=JSON.stringify(S.workouts);const m=JSON.parse(JSON.stringify(ws[0]));
  m.name=[...new Set(ws.map(w=>w.name))].join('＋');m.start=ws[0].start;m.end=Math.max(...ws.map(w=>w.end||w.start));m.dur=ws.reduce((a,w)=>a+wDur(w),0);m.ex=[];
  ws.forEach(w=>w.ex.forEach(e=>{const c=JSON.parse(JSON.stringify(e)),f=m.ex.find(x=>x.id===c.id);if(f){f.sets=f.sets.concat(c.sets);if(c.note)f.note=[f.note,c.note].filter(Boolean).join('／')}else m.ex.push(c)}));normG(m.ex);
@@ -194,7 +199,7 @@ function vSet(){const st=S.settings;return`<h1>設定</h1><div class="card">
  <button class="btn full" style="margin-bottom:8px" onclick="$('imp').click()">⬆️ 匯入備份</button><input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importJSON(this)">
  <button class="btn full" style="margin-bottom:8px" onclick="exportCSV()">📊 匯出 CSV（Excel 可開）</button>
  <button class="btn bad full" onclick="if(confirm('確定刪除所有資料？無法復原！')&&confirm('真的確定？')){localStorage.removeItem('${KEY}');load();render()}">🗑 清除全部資料</button></div>
- <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.4 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
+ <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.5 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
 function download(name,text,type){const b=new Blob([text],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
 function exportJSON(){download('workout-backup-'+dkey(Date.now())+'.json',JSON.stringify(S,null,1),'application/json');toast('已匯出備份')}
 function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.workouts))throw 0;if(!confirm('匯入會覆蓋目前資料，確定？'))return;localStorage.setItem(KEY,JSON.stringify(d));load();render();toast('匯入成功')}catch(e){alert('檔案格式錯誤')}};r.readAsText(f);inp.value=''}
@@ -356,6 +361,36 @@ function calcPlates(){const tgt=+$('pw').value||0,bar=+$('pb').value||0;const P=
  $('pres').innerHTML=`<div class="card"><div class="small muted">每邊：</div><div style="font-size:20px;font-weight:700;margin:4px 0">${use.join(' + ')||'—'}</div>${side>1e-6?`<div class="small" style="color:var(--bad)">無法剛好湊出，差 ${nf(side*2)} ${U()}（實際 ${nf(tgt-side*2)}）</div>`:''}
  <div class="plates"><div style="width:40px;height:10px;background:#9ca3af"></div>${use.map(p=>`<div class="plate" style="background:${col[p]||'#888'};color:${p===5?'#111':'#fff'};width:${p>=10?18:12}px;height:${40+p*2.4}px">${p}</div>`).join('')}<div style="width:30px;height:10px;background:#9ca3af"></div></div></div>`}
 // init
+
+function hm(ts){const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+function dragHint(){if(localStorage.getItem('wt-draghint'))return'';return`<div class="card small" id="dhint" style="display:flex;align-items:center;gap:8px;padding:10px 12px">💡 長按一筆訓練拖到另一筆上就能合併<span class="sp"></span><button class="btn sm" onclick="localStorage.setItem('wt-draghint','1');render()">知道了</button></div>`}
+function dragMerge(aid,bid){const A=S.workouts.find(w=>w.id===aid),B=S.workouts.find(w=>w.id===bid);if(!A||!B||aid===bid)return;
+ const e=A.start<=B.start?A:B,l=e===A?B:A;
+ let m=`把『${A.name}』合併到『${B.name}』？\n\nA：${A.name}　${dstr(A.start)} ${hm(A.start)}\nB：${B.name}　${dstr(B.start)} ${hm(B.start)}\n\n合併後以較早的「${e.name}」（${hm(e.start)}）為開始時間，相同動作的組數會合在一起。`;
+ if(dkey(A.start)!==dkey(B.start))m+=`\n\n⚠️ 這兩筆不是同一天，合併後會算在 ${dstr(e.start)} 那天`;
+ mergeIds([aid,bid],m)}
+(function(){let D=null,sup=0;const LP=400,TH=10;
+ function cardAt(x,y){const el=document.elementFromPoint(x,y);return el&&el.closest?el.closest('.wcard'):null}
+ function start(card,x,y,touch){if(selMode||D)return;D={card,id:card.dataset.wid,x0:x,y0:y,x,y,touch,on:false,tgt:null};D.t=setTimeout(lift,LP)}
+ function lift(){if(!D)return;D.on=true;try{navigator.vibrate&&navigator.vibrate(15)}catch(e){}
+  const r=D.card.getBoundingClientRect(),g=D.card.cloneNode(true);g.classList.add('dghost');g.classList.remove('wcard');g.style.width=r.width+'px';g.style.left=r.left+'px';g.style.top=r.top+'px';D.dx=D.x-r.left;D.dy=D.y-r.top;document.body.appendChild(g);D.g=g;D.card.classList.add('dsrc');document.body.classList.add('dragging');window.getSelection&&getSelection().removeAllRanges();loop()}
+ function move(x,y){if(!D)return false;D.x=x;D.y=y;if(!D.on){if(Math.hypot(x-D.x0,y-D.y0)>TH)cancel();return false}
+  D.g.style.left=(x-D.dx)+'px';D.g.style.top=(y-D.dy)+'px';const c=cardAt(x,y);const t=c&&c!==D.card?c:null;if(t!==D.tgt){D.tgt&&D.tgt.classList.remove('dtgt');t&&t.classList.add('dtgt');D.tgt=t}return true}
+ function loop(){if(!D||!D.on)return;const h=innerHeight,E=70;let v=0;if(D.y<E)v=-Math.ceil((E-D.y)/6);else if(D.y>h-E)v=Math.ceil((D.y-(h-E))/6);if(v){scrollBy(0,v);move(D.x,D.y)}D.raf=requestAnimationFrame(loop)}
+ function end(){if(!D)return;const d=D;cancel();if(d.on){sup=Date.now();if(d.tgt){const a=d.id,b=d.tgt.dataset.wid;setTimeout(()=>dragMerge(a,b),30)}}}
+ function cancel(){if(!D)return;clearTimeout(D.t);cancelAnimationFrame(D.raf);D.g&&D.g.remove();D.card.classList.remove('dsrc');D.tgt&&D.tgt.classList.remove('dtgt');document.body.classList.remove('dragging');D=null}
+ document.addEventListener('touchstart',e=>{if(e.touches.length!==1){cancel();return}const c=e.target.closest&&e.target.closest('.wcard');if(c){const t=e.touches[0];start(c,t.clientX,t.clientY,true)}},{passive:true});
+ document.addEventListener('touchmove',e=>{if(!D)return;const t=e.touches[0];if(move(t.clientX,t.clientY)||D&&D.on)e.preventDefault()},{passive:false});
+ document.addEventListener('touchend',e=>{if(D&&D.on)e.preventDefault();end()},{passive:false});
+ document.addEventListener('touchcancel',cancel);
+ document.addEventListener('mousedown',e=>{if(e.button!==0||Date.now()-lastT<800)return;const c=e.target.closest&&e.target.closest('.wcard');if(c)start(c,e.clientX,e.clientY,false)});
+ let lastT=0;document.addEventListener('touchstart',()=>lastT=Date.now(),{passive:true,capture:true});
+ document.addEventListener('mousemove',e=>{if(D&&!D.touch)move(e.clientX,e.clientY)});
+ document.addEventListener('mouseup',e=>{if(D&&!D.touch)end()});
+ document.addEventListener('click',e=>{if(Date.now()-sup<500&&e.target.closest&&e.target.closest('.wcard')){e.stopPropagation();e.preventDefault()}},true);
+ document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('.wcard'))e.preventDefault()});
+ addEventListener('scroll',()=>{if(D&&!D.on)cancel()},{passive:true});
+})();
 load();render();if(S.active)openWorkout();
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{r.update();document.addEventListener('visibilitychange',()=>{if(!document.hidden)r.update()})}).catch(()=>{});
 if('serviceWorker' in navigator&&navigator.serviceWorker.controller){let rl=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(rl)return;rl=true;if(!S.rest)location.reload()})}

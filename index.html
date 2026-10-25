@@ -120,6 +120,9 @@ function e1rm(w,r){return r>0&&w>0?(r===1?w:w*(1+r/30)):0}
 function setDone(s){return s.done&&(+s.r>0)}
 function wVol(w){let v=0,n=0;w.ex.forEach(e=>e.sets.forEach(s=>{if(setDone(s)&&s.t!=='W'){v+=(+s.w||0)*(+s.r||0);n++}}));return{v,n}}
 function weekStart(ts){const d=new Date(ts);d.setHours(0,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7));return d.getTime()}
+const GCOL=['#38bdf8','#a78bfa','#f472b6','#facc15','#34d399','#fb7185'];
+function gInfo(arr){const cnt={};arr.forEach(e=>{if(e.g)cnt[e.g]=(cnt[e.g]||0)+1});const L={},pos={};let k=0;return arr.map(e=>{if(!e.g||cnt[e.g]<2)return null;if(!(e.g in L)){L[e.g]=String.fromCharCode(65+k);pos[e.g]=0;k++}pos[e.g]++;return{L:L[e.g],i:pos[e.g],c:GCOL[(L[e.g].charCodeAt(0)-65)%GCOL.length]}})}
+function normG(arr){const cnt={};arr.forEach(e=>{if(e.g)cnt[e.g]=(cnt[e.g]||0)+1});arr.forEach(e=>{if(e.g&&cnt[e.g]<2)delete e.g});const out=[],seen=new Set();arr.forEach(e=>{if(!e.g){out.push(e);return}if(seen.has(e.g))return;seen.add(e.g);arr.forEach(x=>{if(x.g===e.g)out.push(x)})});arr.splice(0,arr.length,...out);return arr}
 function wDur(w){return w.dur!=null?w.dur:((w.end||w.start)-w.start)}
 function sorted(){return S.workouts.slice().sort((a,b)=>b.start-a.start)}
 // ---------- tabs ----------
@@ -150,7 +153,7 @@ function vHome(){
  <h2>最近訓練</h2>${last.length?last.map(wCard).join(''):'<div class="card muted small">還沒有紀錄，開始第一次訓練吧！</div>'}`}
 function wCard(w){const{v,n}=wVol(w);const sel=selMode&&selIds.includes(w.id);return`<div class="card" style="${sel?'outline:2px solid var(--ac)':''}" onclick="${selMode?`toggleSel('${w.id}')`:`viewWorkout('${w.id}')`}">${selMode?`<div class="tiny" style="color:var(--ac)">${sel?'☑︎ 已選取':'☐ 點選以選取'}</div>`:''}<div class="row"><b>${esc(w.name)}</b><span class="sp"></span><span class="tiny">${dstr(w.start)}</span></div>
  <div class="small muted" style="margin:6px 0">⏱ ${fmtDurZh(wDur(w))}　🏋️ ${kfmt(v)} ${U()}　✅ ${n} 組${w.prs?'　🏆 '+w.prs:''}</div>
- <div class="small">${w.ex.map(e=>`${esc(exById(e.id).name)} × ${e.sets.filter(setDone).length}`).join('<br>')}</div></div>`}
+ <div class="small">${(g=>w.ex.map((e,i)=>`${g[i]?`<b style="color:${g[i].c}">${g[i].L}${g[i].i}</b> `:''}${esc(exById(e.id).name)} × ${e.sets.filter(setDone).length}`).join('<br>'))(gInfo(w.ex))}</div></div>`}
 function vHist(){
  const now=new Date();if(!calM)calM=new Date(now.getFullYear(),now.getMonth(),1).getTime();
  const m=new Date(calM),y=m.getFullYear(),mo=m.getMonth(),first=(new Date(y,mo,1).getDay()+6)%7,nd=new Date(y,mo+1,0).getDate();
@@ -168,7 +171,7 @@ function mergeIds(ids){const ws=S.workouts.filter(w=>ids.includes(w.id)).sort((a
  if(!confirm(`確定把這 ${ws.length} 筆訓練合併成一筆？`))return;
  const backup=JSON.stringify(S.workouts);const m=JSON.parse(JSON.stringify(ws[0]));
  m.name=[...new Set(ws.map(w=>w.name))].join('＋');m.start=ws[0].start;m.end=Math.max(...ws.map(w=>w.end||w.start));m.dur=ws.reduce((a,w)=>a+wDur(w),0);m.ex=[];
- ws.forEach(w=>w.ex.forEach(e=>{const c=JSON.parse(JSON.stringify(e)),f=m.ex.find(x=>x.id===c.id);if(f){f.sets=f.sets.concat(c.sets);if(c.note)f.note=[f.note,c.note].filter(Boolean).join('／')}else m.ex.push(c)}));
+ ws.forEach(w=>w.ex.forEach(e=>{const c=JSON.parse(JSON.stringify(e)),f=m.ex.find(x=>x.id===c.id);if(f){f.sets=f.sets.concat(c.sets);if(c.note)f.note=[f.note,c.note].filter(Boolean).join('／')}else m.ex.push(c)}));normG(m.ex);
  S.workouts=S.workouts.filter(w=>!ids.includes(w.id));S.workouts.push(m);S.workouts.forEach(w=>w.prs=countPRs(w));save();selMode=false;selIds=[];render();
  undoToast('已合併 '+ws.length+' 筆訓練',()=>{S.workouts=JSON.parse(backup);save();render();toast('已復原')})}
 function undoToast(msg,fn){const t=$('toast');t.style.pointerEvents='auto';t.innerHTML=esc(msg)+' · <button style="color:var(--ac);font-weight:700;padding:4px 8px" id="undob">復原</button>';t.style.display='block';$('undob').onclick=()=>{t.style.display='none';fn()};clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',8000)}
@@ -191,11 +194,11 @@ function vSet(){const st=S.settings;return`<h1>設定</h1><div class="card">
  <button class="btn full" style="margin-bottom:8px" onclick="$('imp').click()">⬆️ 匯入備份</button><input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importJSON(this)">
  <button class="btn full" style="margin-bottom:8px" onclick="exportCSV()">📊 匯出 CSV（Excel 可開）</button>
  <button class="btn bad full" onclick="if(confirm('確定刪除所有資料？無法復原！')&&confirm('真的確定？')){localStorage.removeItem('${KEY}');load();render()}">🗑 清除全部資料</button></div>
- <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.3 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
+ <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.4 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
 function download(name,text,type){const b=new Blob([text],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
 function exportJSON(){download('workout-backup-'+dkey(Date.now())+'.json',JSON.stringify(S,null,1),'application/json');toast('已匯出備份')}
 function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.workouts))throw 0;if(!confirm('匯入會覆蓋目前資料，確定？'))return;localStorage.setItem(KEY,JSON.stringify(d));load();render();toast('匯入成功')}catch(e){alert('檔案格式錯誤')}};r.readAsText(f);inp.value=''}
-function exportCSV(){const rows=[['日期','訓練','動作','組','類型','重量('+U()+')','次數','完成']];sorted().forEach(w=>w.ex.forEach(e=>e.sets.forEach((s,i)=>rows.push([dkey(w.start),w.name,exById(e.id).name,i+1,STYPE[s.t],s.w,s.r,s.done?'是':'否']))));
+function exportCSV(){const rows=[['日期','訓練','超級組','動作','組','類型','重量('+U()+')','次數','完成']];sorted().forEach(w=>{const gi=gInfo(w.ex);w.ex.forEach((e,ei)=>e.sets.forEach((s,i)=>rows.push([dkey(w.start),w.name,gi[ei]?gi[ei].L+gi[ei].i:'',exById(e.id).name,i+1,STYPE[s.t],s.w,s.r,s.done?'是':'否'])))});
  download('workouts-'+dkey(Date.now())+'.csv','\ufeff'+rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n'),'text/csv');toast('已匯出 CSV')}
 // ---------- modal ----------
 function modal(html){$('mbox').innerHTML=html;$('modal').classList.add('on')}
@@ -232,7 +235,7 @@ function startWorkout(tid,force){const td=sorted().find(w=>dkey(w.start)===dkey(
  if(S.active){if(!confirm('已有進行中的訓練，要放棄並開新的嗎？'))return openWorkout()}
  const t=S.templates.find(x=>x.id===tid);const hr=new Date().getHours();
  S.active={id:uid(),name:t?t.name:(hr<11?'早晨訓練':hr<17?'午間訓練':'晚間訓練'),start:Date.now(),ex:[]};
- if(t)t.ex.forEach(e=>{const prev=lastSets(e.id);S.active.ex.push({id:e.id,sets:[...Array(Math.max(1,e.n))].map((_,i)=>({w:e.w||(prev[i]||prev[prev.length-1]||{}).w||'',r:e.r||'',t:'N',done:false}))})});
+ if(t)t.ex.forEach(e=>{const prev=lastSets(e.id);S.active.ex.push({id:e.id,g:e.g,sets:[...Array(Math.max(1,e.n))].map((_,i)=>({w:e.w||(prev[i]||prev[prev.length-1]||{}).w||'',r:e.r||'',t:'N',done:false}))})});
  save();editW=null;openWorkout()}
 function lastSets(id,excl){const h=exHist(id,excl);return h.length?h[h.length-1].sets:[]}
 function openWorkout(){$('wk').classList.add('on');document.body.style.overflow='hidden';rWk()}
@@ -243,9 +246,10 @@ function rWk(){const w=cur();if(!w)return minimize();const live=!editW;
  ${live?'':`<div class="row small muted" style="margin:4px 0 8px">開始時間 <input type="datetime-local" style="width:auto" value="${new Date(w.start-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16)}" onchange="const d=cur().end-cur().start;cur().start=new Date(this.value).getTime();cur().end=cur().start+d"></div>`}
  ${w.ex.map((e,ei)=>exBlock(e,ei,w)).join('')}
  <button class="btn pri full" style="margin:6px 0 10px" onclick="pickEx(id=>{cur().ex.push({id,sets:[{w:'',r:'',t:'N',done:false}]});persist();rWk()})">＋ 新增動作</button>
+ <button class="btn full" style="margin:0 0 10px" onclick="pickMulti(ids=>{const g=uid();ids.forEach(id=>cur().ex.push({id,g,sets:[{w:'',r:'',t:'N',done:false}]}));persist();rWk()})">🔗 新增超級組（一次選多個動作）</button>
  ${live?`<button class="btn bad full" onclick="if(confirm('放棄這次訓練？紀錄不會保存。')){S.active=null;S.rest=null;save();minimize();rRest()}">放棄訓練</button>`:`<button class="btn full" style="margin-bottom:8px" onclick="resumeWorkout(editW.id)">▶️ 繼續這次訓練</button><button class="btn bad full" onclick="if(confirm('刪除這筆訓練紀錄？')){S.workouts=S.workouts.filter(x=>x.id!==editW.id);save();editW=null;minimize()}">🗑 刪除此紀錄</button>`}`;rRest()}
-function exBlock(e,ei,w){const ex=exById(e.id),prev=lastSets(e.id,w.id);let wn=0;
- return`<div class="ex"><div class="ex-h"><span class="t" onclick="statsModal('${e.id}')">${esc(ex.name)}</span>
+function exBlock(e,ei,w){const ex=exById(e.id),prev=lastSets(e.id,w.id);let wn=0;const gi=gInfo(w.ex)[ei];
+ return`<div class="ex" id="ex${ei}" style="${gi?`border-left:5px solid ${gi.c};${gi.i>1?'margin-top:-6px;':''}`:''}">${gi&&gi.i===1?`<div class="tiny" style="color:${gi.c};font-weight:700;margin-bottom:4px">🔗 超級組 ${gi.L}</div>`:''}<div class="ex-h">${gi?`<span class="tag" style="background:${gi.c};color:#111;font-weight:700">${gi.L}${gi.i}</span>`:''}<span class="t" onclick="statsModal('${e.id}')">${esc(ex.name)}</span>
  <button class="btn sm" onclick="moveEx(${ei},-1)">↑</button><button class="btn sm" onclick="exMenu(${ei})">⋯</button></div>
  ${e.note!=null?`<input placeholder="備註" value="${esc(e.note)}" style="margin-bottom:6px;font-size:14px;padding:7px 10px" onchange="cur().ex[${ei}].note=this.value;persist()">`:''}
  <div class="set hd"><span>組</span><span>上次</span><span>${U()}</span><span>次數</span><span>✓</span></div>
@@ -261,15 +265,28 @@ function cycleType(ei,si){const s=cur().ex[ei].sets[si];s.t=TORDER[(TORDER.index
 function fillPrev(ei,si){const e=cur().ex[ei],p=lastSets(e.id,cur().id)[si];if(p){e.sets[si].w=p.w;e.sets[si].r=p.r;persist();rWk()}}
 function addSet(ei){const ss=cur().ex[ei].sets,l=ss[ss.length-1]||{};ss.push({w:l.w||'',r:l.r||'',t:'N',done:false});persist();rWk()}
 function delSet(ei){const ss=cur().ex[ei].sets;if(ss.length>1)ss.pop();else if(confirm('移除此動作？'))cur().ex.splice(ei,1);persist();rWk()}
-function moveEx(ei,d){const a=cur().ex,j=ei+d;if(j<0||j>=a.length)return;[a[ei],a[j]]=[a[j],a[ei]];persist();rWk()}
+function moveEx(ei,d){const a=cur().ex;moveIn(a,ei,d);persist();rWk()}
+function moveIn(a,ei,d){const e=a[ei];const blk=x=>x.g&&a.filter(y=>y.g===x.g).length>1?a.filter(y=>y.g===x.g):[x];
+ const j=ei+d;if(j<0||j>=a.length)return;if(e.g&&a[j].g===e.g){[a[ei],a[j]]=[a[j],a[ei]];return}
+ const mine=blk(e),nb=blk(a[j]);const rest=a.filter(x=>!mine.includes(x));let idx=rest.indexOf(d<0?nb[0]:nb[nb.length-1]);if(d>0)idx++;rest.splice(idx,0,...mine);a.splice(0,a.length,...rest)}
 function exMenu(ei){modal(`<h2 style="margin-top:0">${esc(exById(cur().ex[ei].id).name)}</h2>
  <button class="btn full" style="margin-bottom:8px" onclick="closeModal();moveEx(${ei},1)">↓ 下移</button>
  <button class="btn full" style="margin-bottom:8px" onclick="const e=cur().ex[${ei}];e.note=e.note==null?'':null;closeModal();persist();rWk()">📝 備註</button>
+ <button class="btn full" style="margin-bottom:8px" onclick="ssModal(${ei})">🔗 加入超級組</button>
+ ${gInfo(cur().ex)[ei]?`<button class="btn full" style="margin-bottom:8px" onclick="delete cur().ex[${ei}].g;normG(cur().ex);closeModal();persist();rWk()">✂️ 移出超級組</button><button class="btn full" style="margin-bottom:8px" onclick="const g=cur().ex[${ei}].g;cur().ex.forEach(x=>{if(x.g===g)delete x.g});closeModal();persist();rWk()">💥 解散超級組</button>`:''}
  <button class="btn full" style="margin-bottom:8px" onclick="closeModal();pickEx(id=>{cur().ex[${ei}].id=id;persist();rWk()})">🔄 替換動作</button>
  <button class="btn full" style="margin-bottom:8px" onclick="closeModal();statsModal(cur().ex[${ei}].id)">📈 查看統計</button>
  <button class="btn bad full" onclick="cur().ex.splice(${ei},1);closeModal();persist();rWk()">移除動作</button>`)}
+function ssModal(ei){const a=cur().ex,me=a[ei];const gi=gInfo(a);modal(`<h2 style="margin-top:0">把「${esc(exById(me.id).name)}」和哪些動作組成超級組？</h2>
+ ${a.map((e,i)=>i===ei?'':`<label class="list-item" style="cursor:pointer"><input type="checkbox" class="ssck" value="${i}" style="width:24px;height:24px;-webkit-appearance:checkbox;appearance:auto" ${me.g&&e.g===me.g?'checked':''}><span class="sp">${gi[i]?`<span class="tag">${gi[i].L}${gi[i].i}</span>`:''}${esc(exById(e.id).name)}</span></label>`).join('')||'<div class="muted small">請先新增其他動作</div>'}
+ <button class="btn pri full" style="margin-top:10px" onclick="applySS(${ei})">確定</button>`)}
+function applySS(ei){const a=cur().ex,me=a[ei];const sel=[...document.querySelectorAll('.ssck')].filter(x=>x.checked).map(x=>a[+x.value]);if(!sel.length){closeModal();return}
+ const g=me.g||sel.find(x=>x.g)?.g||uid();a.forEach(x=>{if(me.g&&x.g===me.g&&x!==me&&!sel.includes(x))delete x.g});me.g=g;sel.forEach(x=>{const old=x.g;if(old&&old!==g)a.forEach(y=>{if(y.g===old)y.g=g});x.g=g});normG(a);closeModal();persist();rWk();toast('已建立超級組')}
 function toggleSet(ei,si){const e=cur().ex[ei],s=e.sets[si];
- if(!s.done){const p=lastSets(e.id,cur().id)[si];if(s.w===''&&p)s.w=p.w;if(s.r===''&&p)s.r=p.r;if(!(+s.r>0)){toast('請輸入次數');return}s.done=true;if(!editW&&S.settings.rest>0)startRest(S.settings.rest)}else s.done=false;
+ if(!s.done){const p=lastSets(e.id,cur().id)[si];if(s.w===''&&p)s.w=p.w;if(s.r===''&&p)s.r=p.r;if(!(+s.r>0)){toast('請輸入次數');return}s.done=true;const a=cur().ex,gi=gInfo(a)[ei];let next=null;
+ if(gi){const mem=a.map((x,i)=>[x,i]).filter(([x])=>x.g===e.g);next=mem.find(([x,i])=>i>ei&&x.sets[si]&&!x.sets[si].done)||mem.find(([x,i])=>x.sets[si]&&!x.sets[si].done)}
+ if(next){if(S.rest&&!editW){S.rest=null;save()}persist();rWk();const el=$('ex'+next[1]);if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.boxShadow='0 0 0 2px '+gi.c;setTimeout(()=>el.style.boxShadow='',1500)}toast('下一個：'+exById(next[0].id).name);return}
+ if(!editW&&S.settings.rest>0)startRest(S.settings.rest)}else s.done=false;
  persist();rWk()}
 // rest timer
 let actx=null;
@@ -305,17 +322,25 @@ function resumeWorkout(id){const w=S.workouts.find(x=>x.id===id);if(!w)return;
  S.workouts=S.workouts.filter(x=>x.id!==id);delete w.end;delete w.prs;delete w.dur;S.active=w;S.rest=null;editW=null;save();render();openWorkout();toast('已回到訓練，可繼續編輯')}
 function viewWorkout(id){const w=S.workouts.find(x=>x.id===id);if(!w)return;editW=JSON.parse(JSON.stringify(w));openWorkout()}
 function saveAsTpl(wid){const w=S.workouts.find(x=>x.id===wid);if(!w)return;const n=prompt('課表名稱',w.name);if(!n)return;
- S.templates.push({id:uid(),name:n,ex:w.ex.map(e=>{const s=e.sets.filter(x=>x.t!=='W');const l=s[s.length-1]||e.sets[0]||{};return{id:e.id,n:Math.max(1,s.length),w:+l.w||0,r:+l.r||0}})});save();closeModal();toast('已存成課表');render()}
+ S.templates.push({id:uid(),name:n,ex:w.ex.map(e=>{const s=e.sets.filter(x=>x.t!=='W');const l=s[s.length-1]||e.sets[0]||{};return{id:e.id,g:e.g,n:Math.max(1,s.length),w:+l.w||0,r:+l.r||0}})});save();closeModal();toast('已存成課表');render()}
 // template editor
 let tplE=null;
 function editTpl(id){const t=S.templates.find(x=>x.id===id);tplE=t?JSON.parse(JSON.stringify(t)):{id:uid(),name:'新課表',ex:[]};rTpl()}
 function rTpl(){const t=tplE;modal(`<div class="row"><h2 class="sp" style="margin-top:0">編輯課表</h2><button class="btn sm" onclick="tplE=null;closeModal()">取消</button></div>
  <div class="field"><label>名稱</label><input value="${esc(t.name)}" onchange="tplE.name=this.value"></div>
- ${t.ex.map((e,i)=>`<div class="card" style="padding:10px"><div class="row"><b class="sp">${esc(exById(e.id).name)}</b><button class="btn sm" onclick="tplE.ex.splice(${i},1);rTpl()">✕</button></div>
- <div class="row small" style="margin-top:6px;gap:6px">組<input type="number" inputmode="numeric" value="${e.n}" onchange="tplE.ex[${i}].n=+this.value||1">次<input type="number" inputmode="numeric" value="${e.r}" onchange="tplE.ex[${i}].r=+this.value||0">${U()}<input type="number" inputmode="decimal" value="${e.w||''}" placeholder="上次" onchange="tplE.ex[${i}].w=+this.value||0"></div></div>`).join('')}
+ ${(gi=>t.ex.map((e,i)=>`<div class="card" style="padding:10px;${gi[i]?`border-left:5px solid ${gi[i].c}`:''}"><div class="row">${gi[i]?`<span class="tag" style="background:${gi[i].c};color:#111;font-weight:700">${gi[i].L}${gi[i].i}</span>`:''}<b class="sp">${esc(exById(e.id).name)}</b>${i<t.ex.length-1?`<button class="btn sm" onclick="tplLink(${i})">${e.g&&t.ex[i+1].g===e.g?'✂️ 斷開':'🔗 連下一個'}</button>`:''}<button class="btn sm" onclick="tplE.ex.splice(${i},1);normG(tplE.ex);rTpl()">✕</button></div>
+ <div class="row small" style="margin-top:6px;gap:6px">組<input type="number" inputmode="numeric" value="${e.n}" onchange="tplE.ex[${i}].n=+this.value||1">次<input type="number" inputmode="numeric" value="${e.r}" onchange="tplE.ex[${i}].r=+this.value||0">${U()}<input type="number" inputmode="decimal" value="${e.w||''}" placeholder="上次" onchange="tplE.ex[${i}].w=+this.value||0"></div></div>`).join(''))(gInfo(t.ex))}
  <button class="btn full" style="margin-bottom:8px" onclick="pickEx(id=>{tplE.ex.push({id,n:3,r:10,w:0});rTpl()})">＋ 新增動作</button>
+ <button class="btn full" style="margin-bottom:8px" onclick="pickMulti(ids=>{const g=uid();ids.forEach(id=>tplE.ex.push({id,g,n:3,r:10,w:0}));rTpl()})">🔗 新增超級組</button>
  <button class="btn pri full" style="margin-bottom:8px" onclick="saveTpl()">儲存課表</button>
  ${S.templates.some(x=>x.id===t.id)?`<button class="btn bad full" onclick="if(confirm('刪除課表？')){S.templates=S.templates.filter(x=>x.id!==tplE.id);save();closeModal();render()}">刪除課表</button>`:''}`)}
+function tplLink(i){const a=tplE.ex,x=a[i],y=a[i+1];if(x.g&&y.g===x.g){const g2=uid();for(let k=i+1;k<a.length&&a[k].g===x.g;k++)a[k].g=g2}else{const g=x.g||y.g||uid();const old=y.g;a.forEach(z=>{if(old&&z.g===old)z.g=g});x.g=g;y.g=g}normG(a);rTpl()}
+let multiSel=[],multiCb=null;
+function pickMulti(cb){multiCb=cb;multiSel=[];pickF='全部';modal(`<div class="row"><h2 class="sp" style="margin-top:0">選擇超級組動作</h2><button class="btn sm" onclick="closeModal();multiCb=null">取消</button></div><input id="pq" placeholder="🔍 搜尋" oninput="multiList()" style="margin-bottom:8px"><div class="chips" id="pchips"></div><div id="plist"></div><div style="position:sticky;bottom:0;padding-top:8px;background:var(--card)"><button class="btn pri full" id="mgo" onclick="multiDone()">加入超級組（0）</button></div>`);multiList()}
+function multiList(){const q=($('pq').value||'').trim().toLowerCase();$('pchips').innerHTML=['全部',...PARTS].map(p=>`<button class="chip ${p===pickF?'on':''}" onclick="pickF='${p}';multiList()">${p}</button>`).join('');
+ $('plist').innerHTML=allEx().filter(e=>(pickF==='全部'||e.part===pickF)&&(!q||e.name.toLowerCase().includes(q))).map(e=>{const k=multiSel.indexOf(e.id);return`<div class="list-item" onclick="multiTog('${e.id}')"><div class="sp"><div style="font-weight:600">${esc(e.name)}</div><span class="tag">${e.part}</span><span class="tag">${EQ[e.eq]||''}</span></div><b style="color:var(--ac);min-width:28px;text-align:center">${k>=0?k+1:'○'}</b></div>`}).join('');$('mgo').textContent=`加入超級組（${multiSel.length}）`}
+function multiTog(id){multiSel=multiSel.includes(id)?multiSel.filter(x=>x!==id):multiSel.concat(id);multiList()}
+function multiDone(){if(multiSel.length<2)return toast('請至少選 2 個動作');const cb=multiCb,ids=multiSel;multiCb=null;closeModal();cb(ids)}
 function saveTpl(){const i=S.templates.findIndex(x=>x.id===tplE.id);if(i>=0)S.templates[i]=tplE;else S.templates.push(tplE);save();tplE=null;closeModal();render();toast('課表已儲存')}
 // body weight
 function bwModal(){const l=S.bw.slice().sort((a,b)=>a.t-b.t);modal(`<div class="row"><h2 class="sp" style="margin-top:0">體重紀錄</h2><button class="btn sm" onclick="closeModal()">關閉</button></div>

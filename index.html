@@ -200,7 +200,7 @@ function vSet(){const st=S.settings;return`<h1>設定</h1><div class="card">
  <button class="btn full" style="margin-bottom:8px" onclick="$('imp').click()">⬆️ 匯入備份</button><input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importJSON(this)">
  <button class="btn full" style="margin-bottom:8px" onclick="exportCSV()">📊 匯出 CSV（Excel 可開）</button>
  <button class="btn bad full" onclick="if(confirm('確定刪除所有資料？無法復原！')&&confirm('真的確定？')){localStorage.removeItem('${KEY}');load();render()}">🗑 清除全部資料</button></div>
- <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.8 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
+ <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.8.1 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
 function download(name,text,type){const b=new Blob([text],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
 function exportJSON(){download('workout-backup-'+dkey(Date.now())+'.json',JSON.stringify(S,null,1),'application/json');toast('已匯出備份')}
 function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.workouts))throw 0;if(!confirm('匯入會覆蓋目前資料，確定？'))return;localStorage.setItem(KEY,JSON.stringify(d));load();render();toast('匯入成功')}catch(e){alert('檔案格式錯誤')}};r.readAsText(f);inp.value=''}
@@ -386,7 +386,7 @@ function slotShort(p){if(p.k==='w'){const t=S.templates.find(x=>x.id===p.tid);re
 function weekInfo(now){now=now||Date.now();const ws=weekStart(now),today=Math.min(6,Math.floor((new Date(now).setHours(0,0,0,0)-ws)/864e5+.01));
  const days=[...Array(7)].map((_,i)=>{const t=new Date(ws);t.setDate(t.getDate()+i);const k=dkey(t.getTime());const ws_=S.workouts.filter(w=>dkey(w.start)===k);return{i,k,t:t.getTime(),plan:S.plan[i],ws:ws_,done:ws_.length>0}});
  const n=days.filter(d=>d.done).length;const next=days.find(d=>d.i>=today&&!d.done&&d.plan.k!=='r');return{ws,today,days,n,next}}
-function wLabel(w){return isCardio(w)?'有氧（'+(w.cardio&&w.cardio.type||'')+'）':(w.name||'重訓')}
+function wLabel(w){return isCardio(w)?'有氧（'+(w.cardio&&w.cardio.type||'其他')+'）':(w.name||'重訓')}
 function copyReport(){const s=reportText();const ok=()=>toast('已複製，貼到 Grok 聊天即可');
  const fb=()=>{const ta=document.createElement('textarea');ta.value=s;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.top='0';document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,99999);let r=false;try{r=document.execCommand('copy')}catch(e){}ta.remove();if(r)ok();else prompt('長按全選複製：',s)};
  if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(s).then(ok,fb);else fb()}
@@ -488,7 +488,7 @@ function sDone(s){const w=s.done;return'週'+DN[Math.round((new Date(w.start).se
 function startS(s){if(!s)return;if(s.p.k==='w'){const t=tplOf(s.p);if(!t)return toast('找不到課表');startWorkout(t.id)}else cardioModal(null,{type:s.p.ct,min:s.p.min,label:s.p.label})}
 function startSlot(i){startS({i,p:S.plan[i]})}
 function reportText(){const F=flexPlan(),I=F.I,g=S.planGoal.min,sl=F.X.slots;
- const done=sl.filter(s=>s.done).map(s=>'✅ '+sName(s).replace(/（.*）/,'')+'('+sDone(s)+')');
+ const done=sl.filter(s=>s.done).map(s=>'✅ '+(s.p.k==='c'||isCardio(s.done)?wLabel(s.done):sName(s).replace(/（.*）/,''))+'('+sDone(s)+')');
  const extra=F.X.ws.filter(w=>!F.X.slotOf.get(w)).map(w=>'✅ '+wLabel(w));
  const pend=sl.filter(s=>!s.done&&!s.p.opt).map(s=>sName(s).split(' ')[0].replace(/（.*）/,''));
  let s='本週 '+I.n+'/'+g+(I.n>=g?'（達標🎉）':'')+'：'+(done.concat(extra).join('、')||'還沒有紀錄');

@@ -108,7 +108,7 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 function load(){try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){S=null}
  if(!S)S={custom:[],workouts:[],templates:defTemplates(),bw:[],settings:{rest:90,unit:'kg',bar:20},active:null,rest:null};
  S.settings=Object.assign({rest:90,unit:'kg',bar:20},S.settings||{});['custom','workouts','templates','bw'].forEach(k=>S[k]=S[k]||[]);ensurePlan()}
-function save(){localStorage.setItem(KEY,JSON.stringify(S))}
+function save(){localStorage.setItem(KEY,JSON.stringify(S,(k,v)=>k[0]==='_'?undefined:v))}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const U=()=>S.settings.unit;
@@ -200,7 +200,7 @@ function vSet(){const st=S.settings;return`<h1>設定</h1><div class="card">
  <button class="btn full" style="margin-bottom:8px" onclick="$('imp').click()">⬆️ 匯入備份</button><input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importJSON(this)">
  <button class="btn full" style="margin-bottom:8px" onclick="exportCSV()">📊 匯出 CSV（Excel 可開）</button>
  <button class="btn bad full" onclick="if(confirm('確定刪除所有資料？無法復原！')&&confirm('真的確定？')){localStorage.removeItem('${KEY}');load();render()}">🗑 清除全部資料</button></div>
- <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.7 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
+ <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.8 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
 function download(name,text,type){const b=new Blob([text],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
 function exportJSON(){download('workout-backup-'+dkey(Date.now())+'.json',JSON.stringify(S,null,1),'application/json');toast('已匯出備份')}
 function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.workouts))throw 0;if(!confirm('匯入會覆蓋目前資料，確定？'))return;localStorage.setItem(KEY,JSON.stringify(d));load();render();toast('匯入成功')}catch(e){alert('檔案格式錯誤')}};r.readAsText(f);inp.value=''}
@@ -457,16 +457,16 @@ function clash(a,b){if(!a||!b)return false;if(a==='C'||b==='C')return false;if(a
 function slotsInfo(now){now=now||Date.now();const I=weekInfo(now);
  const slots=S.plan.map((p,i)=>({i,p,z:slotZone(p),done:null})).filter(s=>s.p.k!=='r');
  const ws=S.workouts.filter(w=>w.start>=I.ws&&w.start<I.ws+7*864e5).sort((a,b)=>a.start-b.start);
- const free=f=>slots.filter(s=>!s.done&&f(s)).sort((a,b)=>(a.p.opt-b.p.opt)||(a.i-b.i))[0];
+ const slotOf=new Map();const free=f=>slots.filter(s=>!s.done&&f(s)).sort((a,b)=>(a.p.opt-b.p.opt)||(a.i-b.i))[0];
  ws.forEach(w=>{let s=null;const ids=w.ex.map(e=>e.id);
   if(isWorkoutCardio(w))s=free(x=>x.p.k==='c');
   else{if(w.tid)s=free(x=>x.p.k==='w'&&x.p.tid===w.tid);
    if(!s){let best=null,bs=0;slots.forEach(x=>{if(x.done||x.p.k!=='w')return;const t=tplOf(x);if(!t||!t.ex.length)return;const m=t.ex.filter(e=>ids.includes(e.id)).length/t.ex.length;if(m>bs){bs=m;best=x}});if(bs>=.5)s=best}
    if(!s){const z=zoneOfW(w);s=free(x=>x.p.k==='w'&&x.z===z)||free(x=>x.p.k==='w')}}
-  if(s)s.done=w;w._slot=s});
+  if(s)s.done=w;slotOf.set(w,s)});
  // last trained day zone
  const lastW=ws[ws.length-1];
- return{I,slots,ws,lastW}}
+ return{I,slots,ws,lastW,slotOf}}
 function pickNext(cands,prevZ,prevKind){let best=null,bs=-1e9;cands.forEach(s=>{let sc=-s.i*0.01-(s.p.opt?5:0);if(clash(prevZ,s.z))sc-=3;if(prevKind&&((prevKind==='C')===(s.z==='C')))sc-=1;if(sc>bs){bs=sc;best=s}});return best}
 function flexPlan(now){now=now||Date.now();const X=slotsInfo(now),I=X.I,g=S.planGoal.min;
  const todayDone=I.days[I.today].done,start=I.today+(todayDone?1:0);
@@ -489,7 +489,7 @@ function startS(s){if(!s)return;if(s.p.k==='w'){const t=tplOf(s.p);if(!t)return 
 function startSlot(i){startS({i,p:S.plan[i]})}
 function reportText(){const F=flexPlan(),I=F.I,g=S.planGoal.min,sl=F.X.slots;
  const done=sl.filter(s=>s.done).map(s=>'✅ '+sName(s).replace(/（.*）/,'')+'('+sDone(s)+')');
- const extra=F.X.ws.filter(w=>!w._slot).map(w=>'✅ '+wLabel(w));
+ const extra=F.X.ws.filter(w=>!F.X.slotOf.get(w)).map(w=>'✅ '+wLabel(w));
  const pend=sl.filter(s=>!s.done&&!s.p.opt).map(s=>sName(s).split(' ')[0].replace(/（.*）/,''));
  let s='本週 '+I.n+'/'+g+(I.n>=g?'（達標🎉）':'')+'：'+(done.concat(extra).join('、')||'還沒有紀錄');
  s+='；待完成：'+(pend.join('、')||'核心全部完成');
@@ -498,25 +498,50 @@ function reportText(){const F=flexPlan(),I=F.I,g=S.planGoal.min,sl=F.X.slots;
 function homePlanCard(){const F=flexPlan(),I=F.I,g=S.planGoal.min,[c,m]=nudge(I);
  return`<div class="card" onclick="go('plan')" style="cursor:pointer;${I.n>=g?'border-color:var(--ok)':''}"><div class="row"><b>📆 本週計畫</b><span class="sp"></span><b class="num" style="font-size:22px;color:${I.n>=g?'var(--ok)':'var(--ac)'}">${I.n} / ${g}</b><span class="small muted">次</span></div>
  <div class="prog" style="height:8px"><i style="width:${Math.min(100,I.n/g*100)}%;${I.n>=g?'background:var(--ok)':''}"></i></div>
- <div class="small" style="margin-top:8px">${I.days[I.today].done?'今天 ✅ 已完成　':''}${F.next?'下一次建議：<b>'+esc(sName(F.next))+'</b>':''}</div><div class="small" style="margin-top:4px;${c==='bad'?'color:#fbbf24':c==='ok'?'color:var(--ok)':'color:var(--tx2)'}">${m}</div></div>`}
+ <div class="small" style="margin-top:8px">${I.days[I.today].done?'今天 ✅ 已完成　':''}${F.next?'下一次建議：<b onclick="event.stopPropagation();slotSheet('+F.next.i+')" style="text-decoration:underline">'+esc(sName(F.next))+' ›</b>':''}</div><div class="small" style="margin-top:4px;${c==='bad'?'color:#fbbf24':c==='ok'?'color:var(--ok)':'color:var(--tx2)'}">${m}</div></div>`}
 let showFixed=false;
 function vPlan(){ensurePlan();const F=flexPlan(),I=F.I,g=S.planGoal.min,mx=S.planGoal.max,[c,m]=nudge(I),sl=F.X.slots;
- const row=s=>`<div class="list-item" style="min-height:44px"><span style="font-size:20px">${s.done?'✅':'⬜'}</span><div class="sp"><div style="font-weight:600">${s.p.k==='w'?'🏋️':'🏃'} ${esc(sName(s))}${s.p.opt?' <span class="tag">選做</span>':''}</div>${s.done?`<div class="tiny" style="color:var(--ok)">${esc(wLabel(s.done))}・${sDone(s)}</div>`:''}</div>${!s.done?`<button class="btn sm" onclick="startS(flexPlan().X.slots.find(x=>x.i===${s.i}))">開始</button>`:''}</div>`;
- const extra=F.X.ws.filter(w=>!w._slot);
+ const row=s=>`<div class="list-item" style="min-height:44px"><span style="font-size:20px">${s.done?'✅':'⬜'}</span><div class="sp" onclick="slotSheet(${s.i})" style="cursor:pointer"><div style="font-weight:600">${s.p.k==='w'?'🏋️':'🏃'} ${esc(sName(s))}${s.p.opt?' <span class="tag">選做</span>':''} <span class="muted">›</span></div>${s.p.k==='w'?`<div class="tiny">${(tplOf(s.p)||{ex:[]}).ex.map(e=>esc(exById(e.id).name)).join('、')}</div>`:''}${s.done?`<div class="tiny" style="color:var(--ok)">${esc(wLabel(s.done))}・${sDone(s)}</div>`:''}</div>${!s.done?`<button class="btn sm" onclick="startS(flexPlan().X.slots.find(x=>x.i===${s.i}))">開始</button>`:''}</div>`;
+ const extra=F.X.ws.filter(w=>!F.X.slotOf.get(w));
  return`<h1>本週計畫</h1>
  <div class="card" style="text-align:center;${I.n>=g?'border-color:var(--ok)':''}">${ring(I.n,g,mx)}<div style="font-size:18px;font-weight:700;margin-top:4px">本週 ${I.n} / ${g} 次（目標）</div>
  <div class="small" style="margin-top:6px;${c==='bad'?'color:#fbbf24':c==='ok'?'color:var(--ok)':'color:var(--tx2)'}">${m}</div>
  <div class="small" style="margin-top:6px">🏃 本週有氧 <b>${weekCardioMin(I.ws)}</b> 分鐘</div><div class="tiny" style="margin-top:6px">彈性制：哪天練什麼都行，自動勾掉對應項目；有練的「天數」才算次數，一天最多 1 次</div>
  <div class="row" style="gap:8px;margin-top:12px"><button class="btn pri full" onclick="copyReport()">📋 回報給 Grok</button><button class="btn full" onclick="cardioModal()">🏃 記錄有氧</button></div></div>
- ${F.next&&I.n<mx?`<div class="card" style="border-color:var(--ac)"><div class="tiny">下一次建議${F.start>I.today?'（明天起）':''}</div><div class="row" style="margin-top:4px"><b class="sp" style="font-size:18px">${F.next.p.k==='w'?'🏋️':'🏃'} ${esc(sName(F.next))}</b><button class="btn pri sm" onclick="startS(flexPlan().next)">▶️ 開始</button></div>${F.next.p.note?`<div class="tiny" style="margin-top:4px">${esc(F.next.p.note)}</div>`:''}</div>`:''}
+ ${F.next&&I.n<mx?`<div class="card" style="border-color:var(--ac)"><div class="tiny">下一次建議${F.start>I.today?'（明天起）':''}</div><div class="row" style="margin-top:4px"><b class="sp" style="font-size:18px;cursor:pointer" onclick="slotSheet(${F.next.i})">${F.next.p.k==='w'?'🏋️':'🏃'} ${esc(sName(F.next))} <span class="muted">›</span></b><button class="btn pri sm" onclick="startS(flexPlan().next)">▶️ 開始</button></div>${F.next.p.k==='w'?`<div class="small" style="margin-top:6px">${(tplOf(F.next.p)||{ex:[]}).ex.map(e=>esc(exById(e.id).name)+' '+e.n+'×'+e.r).join('<br>')}</div>`:''}${F.next.p.note?`<div class="tiny" style="margin-top:4px">${esc(F.next.p.note)}</div>`:''}</div>`:''}
  <h2>本週清單</h2><div class="card">${sl.filter(s=>!s.p.opt).map(row).join('')}${sl.filter(s=>s.p.opt).map(row).join('')}${extra.map(w=>`<div class="list-item" style="min-height:44px"><span style="font-size:20px">✅</span><div class="sp small">${esc(wLabel(w))}（額外）</div></div>`).join('')}</div>
- <h2>剩下幾天建議排程</h2><div class="card">${F.days.length?F.days.map(d=>{const s=F.sched[d];return`<div class="list-item" style="min-height:44px"><b style="width:64px">週${DN[d]}${d===I.today?' 今天':''}</b><span class="sp ${s?'':'muted'}">${s?(s.p.k==='w'?'🏋️ ':'🏃 ')+esc(sName(s)):'🛌 休息／可選做快走'}</span>${(S.planEdited||{})[d]?'<span class="tag">手動</span>':''}</div>`}).join(''):'<div class="small muted">本週已結束</div>'}
+ <h2>剩下幾天建議排程</h2><div class="card">${F.days.length?F.days.map(d=>{const s=F.sched[d];return`<div class="list-item" style="min-height:44px"><b style="width:64px">週${DN[d]}${d===I.today?' 今天':''}</b><span class="sp ${s?'':'muted'}" ${s?`onclick="slotSheet(${s.i})" style="cursor:pointer"`:''}>${s?(s.p.k==='w'?'🏋️ ':'🏃 ')+esc(sName(s))+' <span class="muted">›</span>':'🛌 休息／可選做快走'}</span>${(S.planEdited||{})[d]?'<span class="tag">手動</span>':''}</div>`}).join(''):'<div class="small muted">本週已結束</div>'}
  ${I.n+Object.keys(F.sched).length<g?'<div class="small" style="color:#fbbf24;margin-top:6px">剩下的天數不夠排滿 4 次，能練幾次算幾次。</div>':''}</div>
  <button class="btn full" style="margin-bottom:10px" onclick="showFixed=!showFixed;render()">${showFixed?'▲ 收起':'▼ 編輯週計畫範本（調整／交換）'}</button>
  ${showFixed?S.plan.map((p,i)=>`<div class="card" style="padding:10px"><div class="row"><b style="width:40px">週${DN[i]}</b><span class="sp small">${p.k==='w'?'🏋️':p.k==='c'?'🏃':'🛌'} ${esc(slotName(p))}${p.opt?' <span class="tag">選做</span>':''}${(S.planEdited||{})[i]?' <span class="tag">手動</span>':''}</span><button class="btn sm" onclick="editSlot(${i})">✏️ 調整</button></div>${p.note?`<div class="tiny" style="margin-top:4px">${esc(p.note)}</div>`:''}</div>`).join('')+`<div class="tiny" style="margin:-4px 2px 10px">手動調整過的日子（標「手動」）會優先照你的安排；其他日子依你實際練的自動重排。</div>
  <div class="field"><label>每週目標（最少 / 上限）</label><div class="row"><input type="number" inputmode="numeric" value="${g}" onchange="S.planGoal.min=Math.max(1,Math.min(7,+this.value||4));save();render()"><input type="number" inputmode="numeric" value="${mx}" onchange="S.planGoal.max=Math.max(S.planGoal.min,Math.min(7,+this.value||6));save();render()"></div></div>
  <div class="row" style="gap:8px"><button class="btn full" onclick="swapModal()">🔀 交換兩天</button><button class="btn full" onclick="if(confirm('恢復預設週計畫？')){S.plan=null;S.planEdited={};ensurePlan();save();render()}">↺ 恢復預設</button></div>`:''}
  <div class="card small muted">💡 重訓：熱身 1–2 組後正式組 RPE 7–8，減脂期以維持重量為主。睡不好（顧寶寶）的日子把組數減 1、或改快走。</div>`}
+// ---------- slot detail sheet (v1.8) ----------
+let slE=null;
+function slotSheet(i){const p=S.plan[i];if(!p||p.k==='r')return;if(p.k==='w'){const t=tplOf(p);if(!t)return editSlot(i);slE={i,t:JSON.parse(JSON.stringify(t)),note:p.note||''};rSlot()}else cSlot(i)}
+function rSlot(){const{i,t}=slE;const p=S.plan[i];modal(`<div class="row"><h2 class="sp" style="margin-top:0">🏋️ 課表內容</h2><button class="btn sm" onclick="slE=null;closeModal()">關閉</button></div>
+ <div class="field"><label>名稱（可自己改）</label><input value="${esc(t.name)}" onchange="slE.t.name=this.value"></div>
+ ${t.ex.map((e,k)=>`<div class="card" style="padding:10px;margin-bottom:8px"><div class="row"><b class="sp" onclick="slSwap(${k})" style="cursor:pointer">${k+1}. ${esc(exById(e.id).name)} <span class="muted">›</span></b><button class="btn sm" onclick="slMove(${k},-1)">↑</button><button class="btn sm" onclick="slMove(${k},1)">↓</button><button class="btn sm bad" onclick="slE.t.ex.splice(${k},1);rSlot()">✕</button></div>
+ <div class="row small" style="margin-top:6px;gap:6px">組<input type="number" inputmode="numeric" value="${e.n}" onchange="slE.t.ex[${k}].n=Math.max(1,+this.value||1)">${exType(e.id)==='w'?'次':exType(e.id)==='c'?'分':'秒'}<input type="number" inputmode="numeric" value="${e.r}" onchange="slE.t.ex[${k}].r=+this.value||0"><button class="btn sm" style="white-space:nowrap;flex:none" onclick="slSwap(${k})">🔄換</button></div></div>`).join('')||'<div class="muted small" style="margin-bottom:8px">還沒有動作</div>'}
+ <button class="btn full" style="margin-bottom:8px" onclick="pickEx(id=>{slE.t.ex.push({id,n:3,r:10,w:0});rSlot()})">＋ 新增動作</button>
+ <div class="field"><label>強度／休息提示</label><input value="${esc(slE.note)}" onchange="slE.note=this.value"></div>
+ <div class="tiny" style="margin-bottom:10px">點動作名稱可替換成動作庫的其他動作（含自訂）。儲存後「開始重訓」會帶入你的版本。</div>
+ <button class="btn pri full" style="margin-bottom:8px" onclick="slSave()">💾 儲存</button>
+ <button class="btn ok full" style="margin-bottom:8px" onclick="slSave(1)">💾 儲存並開始重訓</button>
+ ${planTpls().some(x=>x.id===t.id)?`<button class="btn full" onclick="slReset()">↺ 恢復預設動作</button>`:''}`)}
+function slSwap(k){pickEx(id=>{slE.t.ex[k].id=id;rSlot()})}
+function slMove(k,d){const a=slE.t.ex,j=k+d;if(j<0||j>=a.length)return;[a[k],a[j]]=[a[j],a[k]];rSlot()}
+function slReset(){if(!confirm('恢復這個課表的預設動作與名稱？'))return;const d=planTpls().find(x=>x.id===slE.t.id);slE.t.name=d.name;slE.t.ex=d.ex;const dn=defPlan().find(x=>x.tid===d.id);if(dn)slE.note=dn.note;rSlot()}
+function slSave(go_){const{i,t}=slE;const k=S.templates.findIndex(x=>x.id===t.id);if(k>=0)S.templates[k]=t;else S.templates.push(t);S.plan[i].note=slE.note;save();slE=null;closeModal();render();toast('已儲存');if(go_)startWorkout(t.id)}
+function cGuide(p){return /間歇/.test(p.label||'')?'熱身 5 分 → 30 秒衝刺（RPE 8–9）／90 秒輕鬆（RPE 3–4）× 6–8 輪 → 緩和 5 分。睡不好或腿很痠就改 Zone 2。':/快走|散步/.test(p.label||'')?'輕鬆快走 RPE 3–4，可推嬰兒車、帶寶寶散步；目的是活動恢復，不用喘。':'Zone 2：RPE 5–6，心率約 (220−年齡)×60–70%，能說完整句子但唱不了歌。跑步機斜坡快走、飛輪、單車、划船都可，30–40 分。'}
+function cSlot(i){const p=S.plan[i];modal(`<div class="row"><h2 class="sp" style="margin-top:0">🏃 ${esc(p.label||'有氧')}</h2><button class="btn sm" onclick="closeModal()">關閉</button></div>
+ <div class="card small">${cGuide(p)}</div>
+ <div class="field"><label>名稱</label><input id="cs_l" value="${esc(p.label||'')}"></div>
+ <div class="row"><div class="field sp"><label>項目</label><select id="cs_t">${CTYPES.map(x=>`<option ${x===p.ct?'selected':''}>${x}</option>`).join('')}</select></div><div class="field sp"><label>目標分鐘</label><input id="cs_m" type="number" inputmode="numeric" value="${p.min||30}"></div></div>
+ <div class="field"><label>備註</label><input id="cs_n" value="${esc(p.note||'')}"></div>
+ <button class="btn pri full" style="margin-bottom:8px" onclick="cSave(${i})">💾 儲存</button><button class="btn ok full" onclick="cSave(${i},1)">＋ 儲存並記錄有氧</button>`)}
+function cSave(i,go_){const p=S.plan[i];p.label=$('cs_l').value.trim()||'有氧';p.ct=$('cs_t').value;p.min=+$('cs_m').value||30;p.note=$('cs_n').value.trim();save();closeModal();render();toast('已儲存');if(go_)cardioModal(null,{type:p.ct,min:p.min,label:p.label})}
 // init
 
 function hm(ts){const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}

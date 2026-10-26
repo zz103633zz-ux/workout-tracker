@@ -107,7 +107,7 @@ t('全身入門',[['goblet',3,10],['dbbench',3,10],['seatrow',3,10],['dbpress',3
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function load(){try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){S=null}
  if(!S)S={custom:[],workouts:[],templates:defTemplates(),bw:[],settings:{rest:90,unit:'kg',bar:20},active:null,rest:null};
- S.settings=Object.assign({rest:90,unit:'kg',bar:20},S.settings||{});['custom','workouts','templates','bw'].forEach(k=>S[k]=S[k]||[])}
+ S.settings=Object.assign({rest:90,unit:'kg',bar:20},S.settings||{});['custom','workouts','templates','bw'].forEach(k=>S[k]=S[k]||[]);ensurePlan()}
 function save(){localStorage.setItem(KEY,JSON.stringify(S))}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -122,7 +122,7 @@ function dkey(ts){const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMo
 const nf=n=>Math.round(n*10)/10;
 const kfmt=n=>n>=10000?nf(n/1000)+'k':String(Math.round(n));
 function e1rm(w,r){return r>0&&w>0?(r===1?w:w*(1+r/30)):0}
-function setDone(s){return s.done&&(+s.r>0)}
+function setDone(s){return s.done&&(+s.r>0||+s.m>0||+s.sec>0)}
 function wVol(w){let v=0,n=0;w.ex.forEach(e=>e.sets.forEach(s=>{if(setDone(s)&&s.t!=='W'){v+=(+s.w||0)*(+s.r||0);n++}}));return{v,n}}
 function weekStart(ts){const d=new Date(ts);d.setHours(0,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7));return d.getTime()}
 const GCOL=['#38bdf8','#a78bfa','#f472b6','#facc15','#34d399','#fb7185'];
@@ -132,10 +132,10 @@ function wDur(w){return w.dur!=null?w.dur:((w.end||w.start)-w.start)}
 function sorted(){return S.workouts.slice().sort((a,b)=>b.start-a.start)}
 // ---------- tabs ----------
 let tab='home',libFilter='全部',libQ='',calM=null;
-const TABS=[['home','首頁','🏠'],['hist','歷史','📅'],['lib','動作','🏋️'],['tpl','課表','📋'],['set','設定','⚙️']];
+const TABS=[['home','首頁','🏠'],['plan','計畫','📆'],['hist','歷史','📅'],['lib','動作','🏋️'],['tpl','課表','📋'],['set','設定','⚙️']];
 function render(){
  $('tabs').innerHTML=TABS.map(t=>`<button class="${tab===t[0]?'on':''}" onclick="go('${t[0]}')"><b>${t[2]}</b>${t[1]}</button>`).join('');
- $('app').innerHTML=({home:vHome,hist:vHist,lib:vLib,tpl:vTpl,set:vSet})[tab]();
+ $('app').innerHTML=({home:vHome,plan:vPlan,hist:vHist,lib:vLib,tpl:vTpl,set:vSet})[tab]();
  updFloat()}
 function go(t){tab=t;render();scrollTo(0,0)}
 function vHome(){
@@ -147,6 +147,7 @@ function vHome(){
  const last=sorted().slice(0,3);
  const bwl=S.bw.slice().sort((a,b)=>b.t-a.t)[0];
  return`<h1>練多少 💪</h1>
+ ${homePlanCard()}
  <div class="card"><div class="row" style="margin-bottom:10px"><b>本週概況</b><span class="sp"></span><span class="tiny">週一起算</span></div>
  <div class="stats"><div class="stat"><b class="num">${wk.length}</b><span>本週訓練</span></div><div class="stat"><b class="num">${kfmt(vol)}</b><span>總量 (${U()})</span></div><div class="stat"><b class="num">${streak}🔥</b><span>連續週數</span></div></div>
  <div class="row" style="margin-top:12px">${days}</div></div>
@@ -154,9 +155,9 @@ function vHome(){
  <h2>從課表開始</h2>
  <div class="chips">${S.templates.map(t=>`<button class="chip" onclick="startWorkout('${t.id}')">${esc(t.name)}</button>`).join('')||'<span class="muted small">尚無課表</span>'}</div>
  <h2>工具</h2>
- <div class="row" style="gap:8px;margin-bottom:12px"><button class="btn full" onclick="bwModal()">⚖️ 體重${bwl?' '+bwl.v+U():''}</button><button class="btn full" onclick="plateModal()">🧮 槓片計算</button></div>
+ <div class="row" style="gap:8px;margin-bottom:12px"><button class="btn full" onclick="cardioModal()">🏃 有氧</button><button class="btn full" onclick="bwModal()">⚖️ 體重${bwl?' '+bwl.v+U():''}</button><button class="btn full" onclick="plateModal()">🧮 槓片計算</button></div>
  <h2>最近訓練</h2>${last.length>1?dragHint():''}${last.length?last.map(wCard).join(''):'<div class="card muted small">還沒有紀錄，開始第一次訓練吧！</div>'}`}
-function wCard(w){const{v,n}=wVol(w);const sel=selMode&&selIds.includes(w.id);return`<div class="card wcard" data-wid="${w.id}" style="${sel?'outline:2px solid var(--ac)':''}" onclick="${selMode?`toggleSel('${w.id}')`:`viewWorkout('${w.id}')`}">${selMode?`<div class="tiny" style="color:var(--ac)">${sel?'☑︎ 已選取':'☐ 點選以選取'}</div>`:''}<div class="row"><b>${esc(w.name)}</b><span class="sp"></span><span class="tiny">${dstr(w.start)}</span></div>
+function wCard(w){if(isCardio(w))return cCard(w);const{v,n}=wVol(w);const sel=selMode&&selIds.includes(w.id);return`<div class="card wcard" data-wid="${w.id}" style="${sel?'outline:2px solid var(--ac)':''}" onclick="${selMode?`toggleSel('${w.id}')`:`viewWorkout('${w.id}')`}">${selMode?`<div class="tiny" style="color:var(--ac)">${sel?'☑︎ 已選取':'☐ 點選以選取'}</div>`:''}<div class="row"><b>${esc(w.name)}</b><span class="sp"></span><span class="tiny">${dstr(w.start)}</span></div>
  <div class="small muted" style="margin:6px 0">⏱ ${fmtDurZh(wDur(w))}　🏋️ ${kfmt(v)} ${U()}　✅ ${n} 組${w.prs?'　🏆 '+w.prs:''}</div>
  <div class="small">${(g=>w.ex.map((e,i)=>`${g[i]?`<b style="color:${g[i].c}">${g[i].L}${g[i].i}</b> `:''}${esc(exById(e.id).name)} × ${e.sets.filter(setDone).length}`).join('<br>'))(gInfo(w.ex))}</div></div>`}
 function vHist(){
@@ -175,7 +176,7 @@ function mergeDay(k){mergeIds(S.workouts.filter(w=>dkey(w.start)===k).map(w=>w.i
 function mergeIds(ids,cmsg){const ws=S.workouts.filter(w=>ids.includes(w.id)).sort((a,b)=>a.start-b.start);if(ws.length<2)return toast('請選擇至少 2 筆訓練');
  if(!confirm(cmsg||`確定把這 ${ws.length} 筆訓練合併成一筆？`))return;
  const backup=JSON.stringify(S.workouts);const m=JSON.parse(JSON.stringify(ws[0]));
- m.name=[...new Set(ws.map(w=>w.name))].join('＋');m.start=ws[0].start;m.end=Math.max(...ws.map(w=>w.end||w.start));m.dur=ws.reduce((a,w)=>a+wDur(w),0);m.ex=[];
+ m.name=[...new Set(ws.map(w=>w.name))].join('＋');m.start=ws[0].start;m.end=Math.max(...ws.map(w=>w.end||w.start));m.dur=ws.reduce((a,w)=>a+wDur(w),0);m.ex=[];{const cw=ws.find(isCardio);if(cw)m.cardio=cw.cardio;if(ws.every(isCardio))m.kind='cardio';else delete m.kind}
  ws.forEach(w=>w.ex.forEach(e=>{const c=JSON.parse(JSON.stringify(e)),f=m.ex.find(x=>x.id===c.id);if(f){f.sets=f.sets.concat(c.sets);if(c.note)f.note=[f.note,c.note].filter(Boolean).join('／')}else m.ex.push(c)}));normG(m.ex);
  S.workouts=S.workouts.filter(w=>!ids.includes(w.id));S.workouts.push(m);S.workouts.forEach(w=>w.prs=countPRs(w));save();selMode=false;selIds=[];render();
  undoToast('已合併 '+ws.length+' 筆訓練',()=>{S.workouts=JSON.parse(backup);save();render();toast('已復原')})}
@@ -199,11 +200,11 @@ function vSet(){const st=S.settings;return`<h1>設定</h1><div class="card">
  <button class="btn full" style="margin-bottom:8px" onclick="$('imp').click()">⬆️ 匯入備份</button><input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importJSON(this)">
  <button class="btn full" style="margin-bottom:8px" onclick="exportCSV()">📊 匯出 CSV（Excel 可開）</button>
  <button class="btn bad full" onclick="if(confirm('確定刪除所有資料？無法復原！')&&confirm('真的確定？')){localStorage.removeItem('${KEY}');load();render()}">🗑 清除全部資料</button></div>
- <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.5 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
+ <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.6 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
 function download(name,text,type){const b=new Blob([text],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
 function exportJSON(){download('workout-backup-'+dkey(Date.now())+'.json',JSON.stringify(S,null,1),'application/json');toast('已匯出備份')}
 function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.workouts))throw 0;if(!confirm('匯入會覆蓋目前資料，確定？'))return;localStorage.setItem(KEY,JSON.stringify(d));load();render();toast('匯入成功')}catch(e){alert('檔案格式錯誤')}};r.readAsText(f);inp.value=''}
-function exportCSV(){const rows=[['日期','訓練','超級組','動作','組','類型','重量('+U()+')','次數','完成']];sorted().forEach(w=>{const gi=gInfo(w.ex);w.ex.forEach((e,ei)=>e.sets.forEach((s,i)=>rows.push([dkey(w.start),w.name,gi[ei]?gi[ei].L+gi[ei].i:'',exById(e.id).name,i+1,STYPE[s.t],s.w,s.r,s.done?'是':'否'])))});
+function exportCSV(){const rows=[['日期','訓練','超級組','動作','組','類型','重量('+U()+')','次數','完成']];sorted().forEach(w=>{const gi=gInfo(w.ex);w.ex.forEach((e,ei)=>e.sets.forEach((s,i)=>rows.push([dkey(w.start),w.name,gi[ei]?gi[ei].L+gi[ei].i:'',exById(e.id).name,i+1,STYPE[s.t],s.w,s.r+(s.m?' '+s.m+'分':'')+(s.d?' '+s.d+'km':'')+(s.sec?' '+s.sec+'秒':''),s.done?'是':'否'])));if(w.cardio){const c=w.cardio;rows.push([dkey(w.start),w.name,'','有氧-'+c.type,1,c.min+'分'+(c.dist?' '+c.dist+'km':'')+(c.hr?' HR'+c.hr:''),'','','是'])}});
  download('workouts-'+dkey(Date.now())+'.csv','\ufeff'+rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n'),'text/csv');toast('已匯出 CSV')}
 // ---------- modal ----------
 function modal(html){$('mbox').innerHTML=html;$('modal').classList.add('on')}
@@ -211,16 +212,17 @@ function closeModal(){$('modal').classList.remove('on')}
 function customExModal(){modal(`<h2>新增自訂動作</h2><div class="field"><label>名稱</label><input id="cxn" placeholder="例如：史密斯深蹲"></div>
  <div class="field"><label>部位</label><select id="cxp">${PARTS.map(p=>`<option>${p}</option>`).join('')}</select></div>
  <div class="field"><label>器材</label><select id="cxe">${Object.entries(EQ).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div>
+ <div class="field"><label>紀錄方式</label><select id="cxt"><option value="">自動（有氧類→分鐘）</option><option value="w">重訓（重量×次數）</option><option value="c">有氧（分鐘）</option><option value="t">計時（秒）</option></select></div>
  <button class="btn pri full" onclick="addCustom()">儲存</button>`)}
-function addCustom(){const n=$('cxn').value.trim();if(!n)return toast('請輸入名稱');const e={id:'c_'+uid(),name:n,part:$('cxp').value,eq:$('cxe').value,custom:true};S.custom.push(e);save();closeModal();if(pickCb){const cb=pickCb;pickCb=null;cb(e.id)}else render()}
+function addCustom(){const n=$('cxn').value.trim();if(!n)return toast('請輸入名稱');const e={id:'c_'+uid(),name:n,part:$('cxp').value,eq:$('cxe').value,custom:true};if($('cxt').value)e.xt=$('cxt').value;S.custom.push(e);save();closeModal();if(pickCb){const cb=pickCb;pickCb=null;cb(e.id)}else render()}
 // exercise history
 function exHist(id,excludeId){const out=[];S.workouts.slice().sort((a,b)=>a.start-b.start).forEach(w=>{if(w.id===excludeId)return;const e=w.ex.filter(x=>x.id===id);if(!e.length)return;const sets=[].concat(...e.map(x=>x.sets)).filter(s=>setDone(s));if(!sets.length)return;
  let vol=0,best=0,bw=0,bs=null;sets.forEach(s=>{const w_=+s.w||0,r=+s.r||0;if(s.t!=='W')vol+=w_*r;const x=e1rm(w_,r);if(x>best){best=x;bs=s}if(w_>bw)bw=w_});out.push({t:w.start,wid:w.id,vol,e1:best,bw,bs,sets})});return out}
 function chart(pts,label){if(pts.length<1)return'<div class="muted small">尚無資料</div>';const W=320,H=140,p=26;const ys=pts.map(x=>x.y),mn=Math.min(...ys),mx=Math.max(...ys),rg=(mx-mn)||1;
  const X=i=>pts.length===1?W/2:p+i*(W-p-8)/(pts.length-1),Y=v=>H-18-(v-mn)/rg*(H-34);const d=pts.map((q,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(q.y).toFixed(1)).join('');
  return`<svg viewBox="0 0 ${W} ${H}" width="100%"><text x="2" y="12">${kfmt(mx)}</text><text x="2" y="${H-20}">${kfmt(mn)}</text><path d="${d}" fill="none" stroke="#ff7a1a" stroke-width="2.5" stroke-linejoin="round"/>${pts.map((q,i)=>`<circle cx="${X(i)}" cy="${Y(q.y)}" r="3" fill="#ff7a1a"/>`).join('')}<text x="${p}" y="${H-3}">${new Date(pts[0].t).getMonth()+1}/${new Date(pts[0].t).getDate()}</text><text x="${W-40}" y="${H-3}">${new Date(pts[pts.length-1].t).getMonth()+1}/${new Date(pts[pts.length-1].t).getDate()}</text></svg><div class="tiny" style="text-align:center">${label}</div>`}
-function statsModal(id){const e=exById(id),h=exHist(id);const best=h.reduce((a,x)=>x.e1>a.e1?x:a,{e1:0}),bw=Math.max(0,...h.map(x=>x.bw)),tv=h.reduce((a,x)=>a+x.vol,0);
- modal(`<div class="row"><h2 class="sp" style="margin-top:0">${esc(e.name)}</h2><button class="btn sm" onclick="closeModal()">關閉</button></div><div><span class="tag">${e.part}</span><span class="tag">${EQ[e.eq]||''}</span></div>
+function statsModal(id){if(exType(id)!=='w'){const e=exById(id);return modal(`<div class="row"><h2 class="sp" style="margin-top:0">${esc(e.name)}</h2><button class="btn sm" onclick="closeModal()">關閉</button></div><div><span class="tag">${e.part}</span><span class="tag">${EQ[e.eq]||''}</span></div>${typeBtns(id)}${cardioStatsHtml(id)}${e.custom?`<button class="btn bad full" style="margin-top:12px" onclick="if(confirm('刪除此自訂動作？')){S.custom=S.custom.filter(x=>x.id!=='${id}');save();closeModal();render()}">刪除自訂動作</button>`:''}`)}const e=exById(id),h=exHist(id);const best=h.reduce((a,x)=>x.e1>a.e1?x:a,{e1:0}),bw=Math.max(0,...h.map(x=>x.bw)),tv=h.reduce((a,x)=>a+x.vol,0);
+ modal(`<div class="row"><h2 class="sp" style="margin-top:0">${esc(e.name)}</h2><button class="btn sm" onclick="closeModal()">關閉</button></div><div><span class="tag">${e.part}</span><span class="tag">${EQ[e.eq]||''}</span></div>${typeBtns(id)}
  <div class="stats" style="margin:12px 0"><div class="stat"><b class="num">${nf(best.e1)}</b><span>預估 1RM</span></div><div class="stat"><b class="num">${bw}</b><span>最大重量</span></div><div class="stat"><b class="num">${h.length}</b><span>訓練次數</span></div></div>
  ${best.bs?`<div class="small muted">最佳組：${best.bs.w} ${U()} × ${best.bs.r}（${dstr(best.t)}）　累積總量 ${kfmt(tv)} ${U()}</div>`:''}
  <h2>預估 1RM 趨勢（Epley）</h2><div class="card">${chart(h.map(x=>({t:x.t,y:nf(x.e1)})),'預估 1RM ('+U()+')')}</div>
@@ -236,7 +238,7 @@ function pickDone(id){const cb=pickCb;pickCb=null;closeModal();cb&&cb(id)}
 // ---------- workout ----------
 let editW=null;// editing past workout copy
 const cur=()=>editW||S.active;
-function startWorkout(tid,force){const td=sorted().find(w=>dkey(w.start)===dkey(Date.now()));if(!S.active&&!force&&td){modal(`<h2 style="margin-top:0">今天已經有一筆訓練</h2><p class="muted small" style="margin-bottom:12px">要接著記在「${esc(td.name)}」，還是開新的？</p><button class="btn pri full" style="margin-bottom:8px" onclick="closeModal();resumeWorkout('${td.id}')">接著記</button><button class="btn full" style="margin-bottom:8px" onclick="closeModal();startWorkout(${tid?`'${tid}'`:'undefined'},true)">開新的</button><button class="btn full" onclick="closeModal()">取消</button>`);return}
+function startWorkout(tid,force){const td=sorted().find(w=>!isCardio(w)&&dkey(w.start)===dkey(Date.now()));if(!S.active&&!force&&td){modal(`<h2 style="margin-top:0">今天已經有一筆訓練</h2><p class="muted small" style="margin-bottom:12px">要接著記在「${esc(td.name)}」，還是開新的？</p><button class="btn pri full" style="margin-bottom:8px" onclick="closeModal();resumeWorkout('${td.id}')">接著記</button><button class="btn full" style="margin-bottom:8px" onclick="closeModal();startWorkout(${tid?`'${tid}'`:'undefined'},true)">開新的</button><button class="btn full" onclick="closeModal()">取消</button>`);return}
  if(S.active){if(!confirm('已有進行中的訓練，要放棄並開新的嗎？'))return openWorkout()}
  const t=S.templates.find(x=>x.id===tid);const hr=new Date().getHours();
  S.active={id:uid(),name:t?t.name:(hr<11?'早晨訓練':hr<17?'午間訓練':'晚間訓練'),start:Date.now(),ex:[]};
@@ -257,18 +259,18 @@ function exBlock(e,ei,w){const ex=exById(e.id),prev=lastSets(e.id,w.id);let wn=0
  return`<div class="ex" id="ex${ei}" style="${gi?`border-left:5px solid ${gi.c};${gi.i>1?'margin-top:-6px;':''}`:''}">${gi&&gi.i===1?`<div class="tiny" style="color:${gi.c};font-weight:700;margin-bottom:4px">🔗 超級組 ${gi.L}</div>`:''}<div class="ex-h">${gi?`<span class="tag" style="background:${gi.c};color:#111;font-weight:700">${gi.L}${gi.i}</span>`:''}<span class="t" onclick="statsModal('${e.id}')">${esc(ex.name)}</span>
  <button class="btn sm" onclick="moveEx(${ei},-1)">↑</button><button class="btn sm" onclick="exMenu(${ei})">⋯</button></div>
  ${e.note!=null?`<input placeholder="備註" value="${esc(e.note)}" style="margin-bottom:6px;font-size:14px;padding:7px 10px" onchange="cur().ex[${ei}].note=this.value;persist()">`:''}
- <div class="set hd"><span>組</span><span>上次</span><span>${U()}</span><span>次數</span><span>✓</span></div>
+ ${exType(e.id)!=='w'?(exType(e.id)==='c'?'<div class="set hd" style="grid-template-columns:38px 1fr 1fr 46px"><span>組</span><span>分鐘</span><span>距離</span><span>✓</span></div>':'<div class="set hd" style="grid-template-columns:38px 1fr 1fr 1fr 46px"><span>組</span><span>上次</span><span>秒</span><span>負重</span><span>✓</span></div>')+e.sets.map((s,si)=>cSetRow(e,ei,si,s,prev[si],exType(e.id))).join(''):`<div class="set hd"><span>組</span><span>上次</span><span>${U()}</span><span>次數</span><span>✓</span></div>
  ${e.sets.map((s,si)=>{const lbl=s.t==='N'?(++wn):s.t;const p=prev[si];return`<div class="set ${s.done?'done':''}">
  <button class="stype ${s.t}" onclick="cycleType(${ei},${si})">${lbl}</button>
  <div class="prev" onclick="fillPrev(${ei},${si})">${p?p.w+'×'+p.r:'—'}</div>
  <input type="number" inputmode="decimal" step="any" value="${s.w}" placeholder="${p?p.w:''}" onchange="cur().ex[${ei}].sets[${si}].w=this.value;persist()">
  <input type="number" inputmode="numeric" value="${s.r}" placeholder="${p?p.r:''}" onchange="cur().ex[${ei}].sets[${si}].r=this.value;persist()">
- <button class="chk" onclick="toggleSet(${ei},${si})">✓</button></div>`}).join('')}
+ <button class="chk" onclick="toggleSet(${ei},${si})">✓</button></div>`}).join('')}`}
  <div class="row" style="margin-top:8px;gap:8px"><button class="btn sm full" onclick="addSet(${ei})">＋ 新增一組</button><button class="btn sm" onclick="delSet(${ei})">－ 刪除</button></div></div>`}
 function persist(){if(!editW)save()}
 function cycleType(ei,si){const s=cur().ex[ei].sets[si];s.t=TORDER[(TORDER.indexOf(s.t)+1)%4];toast(STYPE[s.t]+'組');persist();rWk()}
-function fillPrev(ei,si){const e=cur().ex[ei],p=lastSets(e.id,cur().id)[si];if(p){e.sets[si].w=p.w;e.sets[si].r=p.r;persist();rWk()}}
-function addSet(ei){const ss=cur().ex[ei].sets,l=ss[ss.length-1]||{};ss.push({w:l.w||'',r:l.r||'',t:'N',done:false});persist();rWk()}
+function fillPrev(ei,si){const e=cur().ex[ei],p=lastSets(e.id,cur().id)[si];if(p){Object.assign(e.sets[si],p,{done:e.sets[si].done,t:e.sets[si].t});persist();rWk()}}
+function addSet(ei){const ss=cur().ex[ei].sets,l=ss[ss.length-1]||{};const n=Object.assign({},l,{t:'N',done:false});n.w=n.w||'';n.r=n.r||'';ss.push(n);persist();rWk()}
 function delSet(ei){const ss=cur().ex[ei].sets;if(ss.length>1)ss.pop();else if(confirm('移除此動作？'))cur().ex.splice(ei,1);persist();rWk()}
 function moveEx(ei,d){const a=cur().ex;moveIn(a,ei,d);persist();rWk()}
 function moveIn(a,ei,d){const e=a[ei];const blk=x=>x.g&&a.filter(y=>y.g===x.g).length>1?a.filter(y=>y.g===x.g):[x];
@@ -288,10 +290,10 @@ function ssModal(ei){const a=cur().ex,me=a[ei];const gi=gInfo(a);modal(`<h2 styl
 function applySS(ei){const a=cur().ex,me=a[ei];const sel=[...document.querySelectorAll('.ssck')].filter(x=>x.checked).map(x=>a[+x.value]);if(!sel.length){closeModal();return}
  const g=me.g||sel.find(x=>x.g)?.g||uid();a.forEach(x=>{if(me.g&&x.g===me.g&&x!==me&&!sel.includes(x))delete x.g});me.g=g;sel.forEach(x=>{const old=x.g;if(old&&old!==g)a.forEach(y=>{if(y.g===old)y.g=g});x.g=g});normG(a);closeModal();persist();rWk();toast('已建立超級組')}
 function toggleSet(ei,si){const e=cur().ex[ei],s=e.sets[si];
- if(!s.done){const p=lastSets(e.id,cur().id)[si];if(s.w===''&&p)s.w=p.w;if(s.r===''&&p)s.r=p.r;if(!(+s.r>0)){toast('請輸入次數');return}s.done=true;const a=cur().ex,gi=gInfo(a)[ei];let next=null;
+ if(!s.done){const p=lastSets(e.id,cur().id)[si];const xt=exType(e.id);if(xt==='c'){if(!(+s.m>0)&&p&&+p.m>0)s.m=p.m;if(!(+s.m>0)){toast('請輸入分鐘數');return}}else if(xt==='t'){if(!(+s.sec>0)&&p&&+p.sec>0)s.sec=p.sec;if(!(+s.sec>0)){toast('請輸入秒數');return}}else{if(s.w===''&&p)s.w=p.w;if(s.r===''&&p)s.r=p.r;if(!(+s.r>0)){toast('請輸入次數');return}}s.done=true;const a=cur().ex,gi=gInfo(a)[ei];let next=null;
  if(gi){const mem=a.map((x,i)=>[x,i]).filter(([x])=>x.g===e.g);next=mem.find(([x,i])=>i>ei&&x.sets[si]&&!x.sets[si].done)||mem.find(([x,i])=>x.sets[si]&&!x.sets[si].done)}
  if(next){if(S.rest&&!editW){S.rest=null;save()}persist();rWk();const el=$('ex'+next[1]);if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.boxShadow='0 0 0 2px '+gi.c;setTimeout(()=>el.style.boxShadow='',1500)}toast('下一個：'+exById(next[0].id).name);return}
- if(!editW&&S.settings.rest>0)startRest(S.settings.rest)}else s.done=false;
+ if(!editW&&S.settings.rest>0&&exType(e.id)!=='c')startRest(S.settings.rest)}else s.done=false;
  persist();rWk()}
 // rest timer
 let actx=null;
@@ -316,8 +318,8 @@ function finishWorkout(){const w=cur();
  modal(`<div style="text-align:center;font-size:48px">🎉</div><h2 style="text-align:center;margin-top:4px">訓練完成！</h2><div style="text-align:center" class="muted small">${esc(w.name)} · ${dstr(w.start)}</div>
  <div class="stats" style="margin:14px 0"><div class="stat"><b class="num">${fmtDurZh(w.end-w.start)}</b><span>時間</span></div><div class="stat"><b class="num">${kfmt(v)}</b><span>總量 ${U()}</span></div><div class="stat"><b class="num">${n}</b><span>組數</span></div></div>
  ${prl.length?`<div class="card"><b>🏆 新個人紀錄 ×${prl.length}</b>${prl.map(p=>`<div class="small" style="margin-top:6px">${p}</div>`).join('')}</div>`:''}
- <div class="small">${w.ex.map(e=>{const b=e.sets.reduce((a,s)=>e1rm(+s.w,+s.r)>e1rm(+a.w,+a.r)?s:a,e.sets[0]);return`${esc(exById(e.id).name)}：${e.sets.length} 組，最佳 ${b.w}×${b.r}`}).join('<br>')}</div>
- <button class="btn full" style="margin-top:14px" onclick="closeModal();resumeWorkout('${w.id}')">↩️ 回去繼續訓練</button><div class="row" style="margin-top:8px;gap:8px"><button class="btn full" onclick="saveAsTpl('${w.id}')">存成課表</button><button class="btn pri full" onclick="closeModal()">好</button></div>`)}
+ <div class="small">${w.ex.map(e=>{const b=e.sets.reduce((a,s)=>e1rm(+s.w,+s.r)>e1rm(+a.w,+a.r)?s:a,e.sets[0]);const xt=exType(e.id);if(xt==='c')return`${esc(exById(e.id).name)}：${e.sets.filter(setDone).reduce((a,s)=>a+(+s.m||0),0)} 分鐘`;if(xt==='t')return`${esc(exById(e.id).name)}：${e.sets.length} 組，最長 ${Math.max(0,...e.sets.map(s=>+s.sec||0))} 秒`;return`${esc(exById(e.id).name)}：${e.sets.length} 組，最佳 ${b.w}×${b.r}`}).join('<br>')}</div>
+ ${celebrateLine()}<button class="btn full" style="margin-top:14px" onclick="closeModal();resumeWorkout('${w.id}')">↩️ 回去繼續訓練</button><div class="row" style="margin-top:8px;gap:8px"><button class="btn full" onclick="saveAsTpl('${w.id}')">存成課表</button><button class="btn pri full" onclick="closeModal()">好</button></div>`)}
 function prList(w){const out=[];w.ex.forEach(e=>{const h=exHist(e.id,w.id).filter(x=>x.t<w.start);if(!h.length)return;const pe=Math.max(...h.map(x=>x.e1)),pw=Math.max(...h.map(x=>x.bw)),pv=Math.max(...h.map(x=>x.vol));
  let me=0,mw=0,mv=0;e.sets.filter(setDone).forEach(s=>{me=Math.max(me,e1rm(+s.w,+s.r));mw=Math.max(mw,+s.w||0);if(s.t!=='W')mv+=(+s.w||0)*(+s.r||0)});
  const n=esc(exById(e.id).name);if(mw>pw)out.push(`${n} 最大重量 ${mw} ${U()}`);if(me>pe+0.01)out.push(`${n} 預估 1RM ${nf(me)} ${U()}`);if(mv>pv)out.push(`${n} 單次總量 ${kfmt(mv)} ${U()}`)});return out}
@@ -360,6 +362,117 @@ function calcPlates(){const tgt=+$('pw').value||0,bar=+$('pb').value||0;const P=
  if(tgt<=bar){$('pres').innerHTML=`<div class="muted small">輸入大於槓鈴的重量</div>`;return}let side=(tgt-bar)/2;const use=[];P.forEach(p=>{while(side>=p-1e-9){use.push(p);side-=p}});
  $('pres').innerHTML=`<div class="card"><div class="small muted">每邊：</div><div style="font-size:20px;font-weight:700;margin:4px 0">${use.join(' + ')||'—'}</div>${side>1e-6?`<div class="small" style="color:var(--bad)">無法剛好湊出，差 ${nf(side*2)} ${U()}（實際 ${nf(tgt-side*2)}）</div>`:''}
  <div class="plates"><div style="width:40px;height:10px;background:#9ca3af"></div>${use.map(p=>`<div class="plate" style="background:${col[p]||'#888'};color:${p===5?'#111':'#fff'};width:${p>=10?18:12}px;height:${40+p*2.4}px">${p}</div>`).join('')}<div style="width:30px;height:10px;background:#9ca3af"></div></div></div>`}
+// ---------- weekly plan + cardio (v1.6) ----------
+const CTYPES=['跑步','快走','單車','飛輪','划船','跳繩','其他'];
+const DN='一二三四五六日';
+function planTpls(){const t=(id,name,ex)=>({id,name,ex:ex.map(e=>({id:e[0],n:e[1],w:0,r:e[2]}))});return[
+ t('plan_A','重訓A 上半身',[['bench',4,6],['seatrow',4,10],['dbpress',3,10],['latpd',3,10],['latraise',3,15],['pushdown',2,12]]),
+ t('plan_B','重訓B 下半身',[['squat',4,6],['rdl',3,8],['bulg',3,10],['legcurl',3,12],['calf',3,15],['plank',3,1]]),
+ t('plan_C','重訓C 全身',[['deadlift',3,5],['incdb',3,10],['pullup',3,8],['goblet',3,12],['facepull',3,15],['kbswing',3,15]])]}
+function defPlan(){return[
+ {k:'w',tid:'plan_A',opt:false,note:'4×6–10，RPE 7–8（留 2–3 下），主項休 2–3 分、輔助 60–90 秒'},
+ {k:'c',ct:'快走',min:35,label:'Zone 2 有氧',opt:false,note:'30–40 分，心率約 (220−年齡)×60–70%，能講話但唱不了歌。跑步機爬坡快走/飛輪/單車皆可'},
+ {k:'c',ct:'快走',min:30,label:'快走 / 推嬰兒車散步',opt:true,note:'選做：30 分輕鬆快走，帶寶寶出門也算'},
+ {k:'w',tid:'plan_B',opt:false,note:'深蹲 4×6 RPE 7–8，其餘 3×8–12；主項休 2–3 分'},
+ {k:'r',opt:false,note:'休息日：睡好、補電解質（生酮/低碳特別重要）'},
+ {k:'w',tid:'plan_C',opt:false,note:'全身 45–50 分，最後可加 10 分划船機/飛輪間歇'},
+ {k:'c',ct:'飛輪',min:20,label:'短間歇',opt:true,note:'選做：熱身 5 分 → 30 秒衝刺 / 90 秒輕踩 ×6–8 → 緩和 5 分；太累就改 Zone 2'}]}
+function ensurePlan(){if(!Array.isArray(S.plan)||S.plan.length!==7){S.plan=defPlan();planTpls().forEach(t=>{if(!S.templates.some(x=>x.id===t.id))S.templates.push(t)})}
+ S.planGoal=S.planGoal||{min:4,max:6}}
+function isCardio(w){return w.kind==='cardio'}
+function slotName(p){if(!p)return'';if(p.k==='w'){const t=S.templates.find(x=>x.id===p.tid);return t?t.name:'重訓'}if(p.k==='c')return(p.label||'有氧')+'（'+(p.ct||'')+' '+(p.min||'')+' 分）';return'休息'}
+function slotShort(p){if(p.k==='w'){const t=S.templates.find(x=>x.id===p.tid);return t?t.name.split(' ')[0]:'重訓'}if(p.k==='c')return p.label&&p.label.length<=6?p.label:'有氧';return'休息'}
+// week status: counts DISTINCT DAYS (Mon–Sun) with ≥1 finished workout, max 1 per day
+function weekInfo(now){now=now||Date.now();const ws=weekStart(now),today=Math.min(6,Math.floor((new Date(now).setHours(0,0,0,0)-ws)/864e5+.01));
+ const days=[...Array(7)].map((_,i)=>{const t=new Date(ws);t.setDate(t.getDate()+i);const k=dkey(t.getTime());const ws_=S.workouts.filter(w=>dkey(w.start)===k);return{i,k,t:t.getTime(),plan:S.plan[i],ws:ws_,done:ws_.length>0}});
+ const n=days.filter(d=>d.done).length;const next=days.find(d=>d.i>=today&&!d.done&&d.plan.k!=='r');return{ws,today,days,n,next}}
+function wLabel(w){return isCardio(w)?'有氧（'+(w.cardio&&w.cardio.type||'')+'）':(w.name||'重訓')}
+function reportText(){const I=weekInfo(),g=S.planGoal.min;const done=I.days.filter(d=>d.done).map(d=>'週'+DN[d.i]+' '+[...new Set(d.ws.map(w=>isCardio(w)?'有氧'+(w.cardio&&w.cardio.min?w.cardio.min+'分':''):w.name))].join('+')+' ✅');
+ let s='本週 '+I.n+'/'+g+' 次'+(I.n>=g?'（已達標🎉）':'')+'：'+(done.join('、')||'還沒有紀錄');
+ if(I.next)s+='；下一次：週'+DN[I.next.i]+' '+slotShort(I.next.plan)+(I.next.plan.opt?'（選做）':'');
+ const missed=I.days.filter(d=>d.i<I.today&&!d.done&&d.plan.k!=='r'&&!d.plan.opt).map(d=>'週'+DN[d.i]+slotShort(d.plan));if(missed.length)s+='；未完成：'+missed.join('、');
+ {const cm=weekCardioMin(I.ws);if(cm)s+='；本週有氧 '+cm+' 分';}return s+'（'+dkey(I.ws).slice(5).replace('-','/')+' 週）'}
+function copyReport(){const s=reportText();const ok=()=>toast('已複製，貼到 Grok 聊天即可');
+ const fb=()=>{const ta=document.createElement('textarea');ta.value=s;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.top='0';document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,99999);let r=false;try{r=document.execCommand('copy')}catch(e){}ta.remove();if(r)ok();else prompt('長按全選複製：',s)};
+ if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(s).then(ok,fb);else fb()}
+function ring(n,g,mx){const p=Math.min(1,n/g),R=52,C=2*Math.PI*R,col=n>=g?'var(--ok)':'var(--ac)';
+ return`<svg viewBox="0 0 130 130" width="130" height="130"><circle cx="65" cy="65" r="${R}" fill="none" stroke="#262a33" stroke-width="12"/><circle cx="65" cy="65" r="${R}" fill="none" stroke="${col}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${(C*p).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 65 65)"/><text x="65" y="66" text-anchor="middle" style="font-size:34px;font-weight:800;fill:#f3f4f6">${n}/${g}</text><text x="65" y="88" text-anchor="middle" style="font-size:11px">上限 ${mx} 次</text></svg>`}
+function nudge(I){const g=S.planGoal.min,left=7-I.today,need=g-I.n;
+ if(I.n>=S.planGoal.max)return['ok','🏆 本週已達 '+I.n+' 次上限，超棒！剩下的日子好好休息、睡飽。'];
+ if(I.n>=g)return['ok','🎉 本週目標達成！'+(I.n<S.planGoal.max?'還可以再加 '+(S.planGoal.max-I.n)+' 次選做（快走也算）。':'')];
+ const todayDone=I.days[I.today].done,avail=left-(todayDone?1:0);
+ if(need>avail)return['bad','😮‍💨 這週剩下的天數不夠達到 4 次了，沒關係，能動幾次就動幾次，下週再來！'];
+ if(I.today>=3&&I.n<2)return['bad','⏰ 已經週'+DN[I.today]+'了，本週才 '+I.n+' 次。還差 '+need+' 次，剩 '+avail+' 天——今天就算只快走 30 分也算一次！'];
+ if(need===avail)return['bad','⚠️ 接下來每天都要練才能達標（還差 '+need+' 次 / 剩 '+avail+' 天），今天別跳過！'];
+ return['','💪 還差 '+need+' 次達標，剩 '+avail+' 天可以安排。']}
+function maybeCelebrate(){const I=weekInfo();if(I.n>=S.planGoal.min&&S.celebrated!==I.ws){S.celebrated=I.ws;save();setTimeout(()=>modal(`<div style="text-align:center;font-size:56px">🎉🏆🎉</div><h2 style="text-align:center">本週 ${I.n} 次，目標達成！</h2><p class="muted small" style="text-align:center;margin-bottom:12px">上班、讀書、顧新生兒還能練到 4 次，真的很強。</p><button class="btn full" style="margin-bottom:8px" onclick="copyReport()">📋 回報給 Grok</button><button class="btn pri full" onclick="closeModal()">好</button>`),400)}}
+function homePlanCard(){const I=weekInfo(),g=S.planGoal.min,p=I.days[I.today].plan,[c,m]=nudge(I);
+ return`<div class="card" onclick="go('plan')" style="cursor:pointer;${I.n>=g?'border-color:var(--ok)':''}"><div class="row"><b>📆 本週計畫</b><span class="sp"></span><b class="num" style="font-size:22px;color:${I.n>=g?'var(--ok)':'var(--ac)'}">${I.n} / ${g}</b><span class="small muted">次</span></div>
+ <div class="prog" style="height:8px"><i style="width:${Math.min(100,I.n/g*100)}%;${I.n>=g?'background:var(--ok)':''}"></i></div>
+ <div class="small" style="margin-top:8px">今天（週${DN[I.today]}）：${I.days[I.today].done?'✅ 已完成':esc(slotName(p))+(p.opt?'（選做）':'')}</div><div class="small ${c==='bad'?'':'muted'}" style="margin-top:4px;${c==='bad'?'color:#fbbf24':c==='ok'?'color:var(--ok)':''}">${m}</div></div>`}
+function startSlot(i){const p=S.plan[i];if(p.k==='w'){const t=S.templates.find(x=>x.id===p.tid);if(!t)return toast('找不到課表，請編輯計畫');startWorkout(t.id)}else if(p.k==='c')cardioModal(null,{type:p.ct,min:p.min,label:p.label});else cardioModal()}
+function vPlan(){ensurePlan();const I=weekInfo(),g=S.planGoal.min,mx=S.planGoal.max,[c,m]=nudge(I);
+ return`<h1>本週計畫</h1>
+ <div class="card" style="text-align:center;${I.n>=g?'border-color:var(--ok)':''}">${ring(I.n,g,mx)}<div style="font-size:18px;font-weight:700;margin-top:4px">本週 ${I.n} / ${g} 次（目標）</div>
+ <div class="small" style="margin-top:6px;${c==='bad'?'color:#fbbf24':c==='ok'?'color:var(--ok)':'color:var(--tx2)'}">${m}</div>
+ <div class="small" style="margin-top:6px">🏃 本週有氧 <b>${weekCardioMin(I.ws)}</b> 分鐘</div><div class="tiny" style="margin-top:6px">週一到週日，有完成訓練（重訓或有氧）的「天數」，一天最多算 1 次</div>
+ <div class="row" style="gap:8px;margin-top:12px"><button class="btn pri full" onclick="copyReport()">📋 回報給 Grok</button><button class="btn full" onclick="cardioModal()">🏃 記錄有氧</button></div></div>
+ ${I.days.map(d=>{const p=d.plan,isT=d.i===I.today,past=d.i<I.today;const st=d.done?'✅':p.k==='r'?'😴':past?(p.opt?'—':'❌'):isT?'👉':'⬜';
+  return`<div class="card" style="padding:12px;${isT?'outline:2px solid var(--ac);':''}${d.done?'border-color:var(--ok);':''}"><div class="row"><div style="width:44px;text-align:center"><div style="font-size:22px">${st}</div><div class="tiny">週${DN[d.i]} ${new Date(d.t).getMonth()+1}/${new Date(d.t).getDate()}</div></div>
+  <div class="sp"><div style="font-weight:700">${p.k==='w'?'🏋️':p.k==='c'?'🏃':'🛌'} ${esc(slotName(p))}${p.opt?' <span class="tag">選做</span>':''}</div>
+  ${d.done?`<div class="small" style="color:var(--ok)">完成：${d.ws.map(w=>esc(wLabel(w))).join('、')}</div>`:''}
+  ${p.note?`<div class="tiny" style="margin-top:3px">${esc(p.note)}</div>`:''}
+  ${p.k==='w'?`<div class="tiny" style="margin-top:3px">${(S.templates.find(x=>x.id===p.tid)||{ex:[]}).ex.map(e=>esc(exById(e.id).name)+' '+e.n+'×'+e.r).join('、')}</div>`:''}</div></div>
+  <div class="row" style="gap:6px;margin-top:8px">${!d.done&&d.i>=I.today&&p.k!=='r'?`<button class="btn sm pri" onclick="startSlot(${d.i})">${p.k==='w'?'▶️ 開始重訓':'＋ 記錄有氧'}</button>`:''}<span class="sp"></span><button class="btn sm" onclick="editSlot(${d.i})">✏️ 調整</button></div></div>`}).join('')}
+ <div class="card small muted">💡 不一定要照星期幾練：哪天有空就練哪個，只要當天有完成任何訓練就算 1 次。重訓：熱身 1–2 組後正式組 RPE 7–8，減脂期以「維持重量」為主，不必硬衝 PR。睡不好（顧寶寶）的日子把組數減 1、或改快走。</div>
+ <div class="field"><label>每週目標（最少 / 上限）</label><div class="row"><input type="number" inputmode="numeric" value="${g}" onchange="S.planGoal.min=Math.max(1,Math.min(7,+this.value||4));save();render()"><input type="number" inputmode="numeric" value="${mx}" onchange="S.planGoal.max=Math.max(S.planGoal.min,Math.min(7,+this.value||6));save();render()"></div></div>
+ <div class="row" style="gap:8px"><button class="btn full" onclick="swapModal()">🔀 交換兩天</button><button class="btn full" onclick="if(confirm('恢復預設週計畫？')){S.plan=null;ensurePlan();save();render()}">↺ 恢復預設</button></div>`}
+function swapModal(){modal(`<h2 style="margin-top:0">交換兩天的安排</h2><div class="row"><select id="sw1">${[...DN].map((x,i)=>`<option value="${i}">週${x}</option>`).join('')}</select>⇄<select id="sw2">${[...DN].map((x,i)=>`<option value="${i}" ${i===1?'selected':''}>週${x}</option>`).join('')}</select></div><button class="btn pri full" style="margin-top:12px" onclick="const a=+$('sw1').value,b=+$('sw2').value;[S.plan[a],S.plan[b]]=[S.plan[b],S.plan[a]];save();closeModal();render()">交換</button>`)}
+function editSlot(i){const p=S.plan[i];modal(`<div class="row"><h2 class="sp" style="margin-top:0">週${DN[i]} 安排</h2><button class="btn sm" onclick="closeModal()">取消</button></div>
+ <div class="field"><label>類型</label><select id="sk" onchange="$('skw').style.display=this.value==='w'?'':'none';$('skc').style.display=this.value==='c'?'':'none'"><option value="w" ${p.k==='w'?'selected':''}>🏋️ 重訓</option><option value="c" ${p.k==='c'?'selected':''}>🏃 有氧</option><option value="r" ${p.k==='r'?'selected':''}>🛌 休息</option></select></div>
+ <div id="skw" style="${p.k==='w'?'':'display:none'}"><div class="field"><label>課表（可到「課表」頁編輯動作）</label><select id="stid">${S.templates.map(t=>`<option value="${t.id}" ${t.id===p.tid?'selected':''}>${esc(t.name)}</option>`).join('')}</select></div></div>
+ <div id="skc" style="${p.k==='c'?'':'display:none'}"><div class="field"><label>名稱</label><input id="slb" value="${esc(p.label||'Zone 2 有氧')}"></div><div class="row"><div class="field sp"><label>項目</label><select id="sct">${CTYPES.map(x=>`<option ${x===p.ct?'selected':''}>${x}</option>`).join('')}</select></div><div class="field sp"><label>分鐘</label><input id="smin" type="number" inputmode="numeric" value="${p.min||30}"></div></div></div>
+ <div class="field"><label>備註</label><input id="snote" value="${esc(p.note||'')}"></div>
+ <label class="row small" style="margin-bottom:12px"><input type="checkbox" id="sopt" style="width:22px;height:22px;-webkit-appearance:checkbox;appearance:auto" ${p.opt?'checked':''}> 選做（不練也不算缺課）</label>
+ <button class="btn pri full" onclick="saveSlot(${i})">儲存</button>`)}
+function saveSlot(i){const k=$('sk').value,o={k,opt:$('sopt').checked,note:$('snote').value.trim()};if(k==='w')o.tid=$('stid').value;if(k==='c'){o.label=$('slb').value.trim()||'有氧';o.ct=$('sct').value;o.min=+$('smin').value||30}S.plan[i]=o;save();closeModal();render()}
+// cardio entry: stored as a workout {kind:'cardio', ex:[], dur, cardio:{type,min,dist,hr,rpe}}
+function cardioModal(id,pre){const w=id?S.workouts.find(x=>x.id===id):null,c=w?w.cardio:Object.assign({type:'快走',min:30},pre||{});const ds=new Date((w?w.start:Date.now())-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16);
+ modal(`<div class="row"><h2 class="sp" style="margin-top:0">${w?'編輯':'記錄'}有氧</h2><button class="btn sm" onclick="closeModal()">取消</button></div>
+ <div class="chips" id="ctc">${CTYPES.map(x=>`<button class="chip ${x===c.type?'on':''}" onclick="document.querySelectorAll('#ctc .chip').forEach(b=>b.classList.remove('on'));this.classList.add('on')">${x}</button>`).join('')}</div>
+ <div class="row"><div class="field sp"><label>分鐘 *</label><input id="cmin" type="number" inputmode="numeric" value="${c.min||''}"></div><div class="field sp"><label>距離 km（選填）</label><input id="cdist" type="number" inputmode="decimal" step="any" value="${c.dist||''}"></div></div>
+ <div class="row"><div class="field sp"><label>平均心率（選填）</label><input id="chr" type="number" inputmode="numeric" value="${c.hr||''}"></div><div class="field sp"><label>RPE 1–10（選填）</label><input id="crpe" type="number" inputmode="numeric" value="${c.rpe||''}"></div></div>
+ <div class="field"><label>時間</label><input id="cdt" type="datetime-local" value="${ds}"></div>
+ <div class="field"><label>備註（選填）</label><input id="cnote" value="${esc(c.note||'')}"></div>
+ <button class="btn pri full" onclick="saveCardio(${w?`'${w.id}'`:''})">儲存</button>
+ ${w?`<button class="btn bad full" style="margin-top:8px" onclick="if(confirm('刪除這筆有氧？')){S.workouts=S.workouts.filter(x=>x.id!=='${w.id}');save();closeModal();render()}">刪除</button>`:''}`)}
+function saveCardio(id){const min=+$('cmin').value;if(!(min>0))return toast('請輸入分鐘');const on=document.querySelector('#ctc .chip.on');const type=on?on.textContent:'其他';
+ const start=new Date($('cdt').value).getTime()||Date.now();const c={type,min,dist:+$('cdist').value||'',hr:+$('chr').value||'',rpe:+$('crpe').value||'',note:$('cnote').value.trim()};
+ if(id){const w=S.workouts.find(x=>x.id===id);if(w){w.start=start;w.end=start+min*6e4;w.dur=min*6e4;w.cardio=c;w.name='有氧・'+type}}
+ else S.workouts.push({id:uid(),kind:'cardio',name:'有氧・'+type,start,end:start+min*6e4,dur:min*6e4,ex:[],cardio:c});
+ save();closeModal();render();toast('已記錄 '+type+' '+min+' 分');maybeCelebrate()}
+function cCard(w){const c=w.cardio||{};return`<div class="card wcard" data-wid="${w.id}" onclick="${selMode?`toggleSel('${w.id}')`:`cardioModal('${w.id}')`}"><div class="row"><b>🏃 ${esc(w.name)}</b><span class="sp"></span><span class="tiny">${dstr(w.start)}</span></div><div class="small muted" style="margin-top:6px">⏱ ${c.min||0} 分鐘${c.dist?'　📏 '+c.dist+' km':''}${c.hr?'　❤️ '+c.hr+' bpm':''}${c.rpe?'　RPE '+c.rpe:''}${c.note?'<br>'+esc(c.note):''}</div></div>`}
+function celebrateLine(){const I=weekInfo();if(I.n>=S.planGoal.min&&S.celebrated!==I.ws){S.celebrated=I.ws;save();return`<div class="card" style="border-color:var(--ok);text-align:center"><b style="color:var(--ok)">🏆 本週第 ${I.n} 次，目標達成！</b><button class="btn sm full" style="margin-top:8px" onclick="copyReport()">📋 回報給 Grok</button></div>`}return`<div class="small muted" style="text-align:center;margin-bottom:8px">本週進度 ${I.n} / ${S.planGoal.min} 次</div>`}
+// ---------- exercise type: w=重訓 c=有氧 t=計時 (v1.6) ----------
+const XT={w:'重訓',c:'有氧',t:'計時'};
+const REPCARDIO=['kbswing','burpee','clean','farmer'];
+function exType(id){S.exType=S.exType||{};if(S.exType[id])return S.exType[id];const e=exById(id);if(e.xt)return e.xt;return e.part==='全身/有氧'&&!REPCARDIO.includes(id)?'c':'w'}
+function setExType(id,t){S.exType=S.exType||{};S.exType[id]=t;save();statsModal(id);toast('已設為 '+XT[t])}
+function setMin(s){return +s.m||0}
+function cardioMinutesIn(w){if(isCardio(w))return +(w.cardio&&w.cardio.min)||0;let m=0;w.ex.forEach(e=>e.sets.forEach(s=>{if(s.done&&+s.m>0)m+=+s.m}));return m}
+function weekCardioMin(ws){return S.workouts.filter(w=>w.start>=ws&&w.start<ws+7*864e5).reduce((a,w)=>a+cardioMinutesIn(w),0)}
+function cStats(id){const out=[];S.workouts.slice().sort((a,b)=>a.start-b.start).forEach(w=>{const sets=[].concat(...w.ex.filter(x=>x.id===id).map(x=>x.sets)).filter(s=>s.done&&(+s.m>0||+s.sec>0||+s.r>0));if(!sets.length)return;out.push({t:w.start,sets,min:sets.reduce((a,s)=>a+(+s.m||0)+(+s.sec||0)/60,0)})});return out}
+function typeBtns(id){const t=exType(id);return`<div class="row" style="gap:6px;margin:10px 0"><span class="small muted">紀錄方式</span>${Object.entries(XT).map(([k,v])=>`<button class="chip ${k===t?'on':''}" onclick="setExType('${id}','${k}')">${v}</button>`).join('')}</div>`}
+function cardioStatsHtml(id){const h=cStats(id),t=exType(id),tot=h.reduce((a,x)=>a+x.min,0),lg=Math.max(0,...h.map(x=>x.min));
+ const now=weekStart(Date.now()),wk=[...Array(12)].map((_,i)=>{const s=now-(11-i)*7*864e5;return{t:s,y:nf(h.filter(x=>x.t>=s&&x.t<s+7*864e5).reduce((a,x)=>a+x.min,0))}});
+ const fs=s=>t==='c'?(s.m||0)+' 分'+(s.d?' '+s.d+'km':'')+(s.inc?' 坡'+s.inc+'%':'')+(s.spd?' '+s.spd+'km/h':'')+(s.hr?' ❤️'+s.hr:'')+(s.rpe?' RPE'+s.rpe:''):(s.sec?s.sec+' 秒':'')+(s.w?' '+s.w+U():'');
+ return`<div class="stats" style="margin:12px 0"><div class="stat"><b class="num">${Math.round(tot)}</b><span>總分鐘數</span></div><div class="stat"><b class="num">${h.length}</b><span>訓練次數</span></div><div class="stat"><b class="num">${nf(lg)}</b><span>最長一次(分)</span></div></div>
+ <h2>每週分鐘數（近 12 週）</h2><div class="card">${chart(wk,'分鐘 / 週')}</div>
+ <h2>紀錄</h2>${h.slice().reverse().slice(0,30).map(x=>`<div class="list-item"><div class="sp"><div class="small">${dstr(x.t)}</div><div class="tiny">${x.sets.map(fs).join('、')}</div></div><span class="small">${nf(x.min)} 分</span></div>`).join('')||'<div class="muted small">尚無紀錄</div>'}`}
+function cSetRow(e,ei,si,s,p,t){const inp=(f,ph,w,mode)=>`<input type="number" inputmode="${mode||'decimal'}" step="any" value="${esc(s[f]??'')}" placeholder="${ph}" style="${w?'':''}" onchange="cur().ex[${ei}].sets[${si}].${f}=this.value;persist()">`;
+ if(t==='c')return`<div class="set ${s.done?'done':''}" style="grid-template-columns:38px 1fr 1fr 46px"><button class="stype ${s.t}" onclick="cycleType(${ei},${si})">${s.t==='N'?si+1:s.t}</button>${inp('m',p&&p.m?p.m+' 分':'分鐘*','','numeric')}${inp('d','km')}<button class="chk" onclick="toggleSet(${ei},${si})">✓</button></div>
+ <div class="set ${s.done?'done':''}" style="grid-template-columns:38px 1fr 1fr 1fr 1fr;margin-top:-2px"><span class="tiny" style="text-align:center">選填</span>${inp('inc','坡度%')}${inp('spd','km/h')}${inp('hr','心率','','numeric')}${inp('rpe','RPE','','numeric')}</div>`;
+ return`<div class="set ${s.done?'done':''}" style="grid-template-columns:38px 1fr 1fr 1fr 46px"><button class="stype ${s.t}" onclick="cycleType(${ei},${si})">${s.t==='N'?si+1:s.t}</button><div class="prev">${p&&p.sec?p.sec+'秒':'—'}</div>${inp('sec',p&&p.sec?p.sec:'秒*','','numeric')}${inp('w',U()+'(選填)')}<button class="chk" onclick="toggleSet(${ei},${si})">✓</button></div>`}
 // init
 
 function hm(ts){const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}

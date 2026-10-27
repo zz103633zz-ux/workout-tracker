@@ -83,7 +83,7 @@ body.dragging{overflow:hidden;touch-action:none}
 <script>
 'use strict';
 const PARTS=['胸','背','腿','肩','手臂','核心','全身/有氧'];
-const EQ={bb:'槓鈴',db:'啞鈴',mc:'機械',cb:'繩索',bw:'自體重',kb:'壺鈴',ot:'其他'};
+const EQ={bb:'槓鈴',db:'啞鈴',mc:'機械',cb:'繩索',bw:'自體重',kb:'壺鈴',band:'彈力繩',ot:'其他'};
 const LIB=[
 ['bench','槓鈴臥推','胸','bb'],['incbench','上斜槓鈴臥推','胸','bb'],['declbench','下斜槓鈴臥推','胸','bb'],['dbbench','啞鈴臥推','胸','db'],['incdb','上斜啞鈴臥推','胸','db'],['dbfly','啞鈴飛鳥','胸','db'],['cablefly','繩索夾胸','胸','cb'],['pecdeck','蝴蝶機夾胸','胸','mc'],['chestpress','坐姿胸推機','胸','mc'],['pushup','伏地挺身','胸','bw'],['dip','雙槓撐體','胸','bw'],
 ['deadlift','硬舉','背','bb'],['pullup','引體向上','背','bw'],['chinup','反手引體向上','背','bw'],['latpd','滑輪下拉','背','cb'],['bbrow','槓鈴划船','背','bb'],['dbrow','單臂啞鈴划船','背','db'],['seatrow','坐姿划船','背','cb'],['tbar','T槓划船','背','bb'],['machrow','坐姿划船機','背','mc'],['facepull','繩索面拉','背','cb'],['backext','背部伸展','背','bw'],
@@ -91,7 +91,10 @@ const LIB=[
 ['ohp','槓鈴肩推','肩','bb'],['dbpress','啞鈴肩推','肩','db'],['latraise','啞鈴側平舉','肩','db'],['cablelat','繩索側平舉','肩','cb'],['frontraise','啞鈴前平舉','肩','db'],['revfly','反向飛鳥','肩','db'],['arnold','阿諾推舉','肩','db'],['shrug','啞鈴聳肩','肩','db'],['uprow','直立划船','肩','bb'],
 ['bbcurl','槓鈴二頭彎舉','手臂','bb'],['dbcurl','啞鈴二頭彎舉','手臂','db'],['hammer','錘式彎舉','手臂','db'],['preacher','牧師椅彎舉','手臂','mc'],['cablecurl','繩索彎舉','手臂','cb'],['pushdown','繩索三頭下壓','手臂','cb'],['skull','仰臥三頭伸展','手臂','bb'],['ohext','啞鈴過頭三頭伸展','手臂','db'],['cgbench','窄握臥推','手臂','bb'],
 ['plank','棒式','核心','bw'],['crunch','捲腹','核心','bw'],['legraise','懸垂舉腿','核心','bw'],['cablecr','繩索跪姿捲腹','核心','cb'],['abwheel','健腹輪','核心','ot'],['russian','俄羅斯轉體','核心','bw'],
-['kbswing','壺鈴擺盪','全身/有氧','kb'],['clean','上搏','全身/有氧','bb'],['burpee','波比跳','全身/有氧','bw'],['farmer','農夫走路','全身/有氧','db'],['row','划船機','全身/有氧','mc'],['run','跑步機','全身/有氧','mc']
+['kbswing','壺鈴擺盪','全身/有氧','kb'],['clean','上搏','全身/有氧','bb'],['burpee','波比跳','全身/有氧','bw'],['farmer','農夫走路','全身/有氧','db'],['row','划船機','全身/有氧','mc'],['run','跑步機','全身/有氧','mc'],
+['bwsquat','自重深蹲','腿','bw'],['bandsquat','彈力繩深蹲（膝上圈）','腿','band'],['bandbridge','彈力繩臀橋','腿','band'],['bandthrust','彈力繩臀推','腿','band'],['bandwalk','彈力繩蟹行側走','腿','band'],['bandabd','彈力繩站姿側抬腿','腿','band'],['bandkick','彈力繩後踢腿','腿','band'],['firehyd','消防栓','腿','bw'],['bandrdl','彈力繩羅馬尼亞硬舉','腿','band'],['bwlunge','自重弓箭步','腿','bw'],['revlunge','後跨弓箭步','腿','bw'],
+['bandrow','彈力繩划船','背','band'],['bandpa','彈力繩拉開','背','band'],['bandpress','彈力繩肩推','肩','band'],['kneepush','跪姿伏地挺身','胸','bw'],['bandcurl','彈力繩二頭彎舉','手臂','band'],['bandtri','彈力繩三頭伸展','手臂','band'],
+['deadbug','死蟲','核心','bw'],['birddog','鳥狗式','核心','bw'],['sideplank','側棒式','核心','bw']
 ].map(a=>({id:a[0],name:a[1],part:a[2],eq:a[3]}));
 const STYPE={N:'正式',W:'熱身',F:'力竭',D:'遞減'};
 const TORDER=['N','W','F','D'];
@@ -201,7 +204,7 @@ function vSet(){const st=S.settings;return`<h1>設定</h1><div class="card">
  <button class="btn full" style="margin-bottom:8px" onclick="$('imp').click()">⬆️ 匯入備份</button><input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importJSON(this)">
  <button class="btn full" style="margin-bottom:8px" onclick="exportCSV()">📊 匯出 CSV（Excel 可開）</button>
  <button class="btn bad full" onclick="if(confirm('確定刪除所有資料？無法復原！')&&confirm('真的確定？')){localStorage.removeItem('${KEY}');load();render()}">🗑 清除全部資料</button></div>
- <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.8.2 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
+ <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.9 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
 function download(name,text,type){const b=new Blob([text],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
 function exportJSON(){download('workout-backup-'+dkey(Date.now())+'.json',JSON.stringify(S,null,1),'application/json');toast('已匯出備份')}
 function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.workouts))throw 0;if(!confirm('匯入會覆蓋目前資料，確定？'))return;localStorage.setItem(KEY,JSON.stringify(d));load();render();toast('匯入成功')}catch(e){alert('檔案格式錯誤')}};r.readAsText(f);inp.value=''}
@@ -370,7 +373,20 @@ const DN='一二三四五六日';
 function planTpls(){const t=(id,name,ex)=>({id,name,ex:ex.map(e=>({id:e[0],n:e[1],w:0,r:e[2]}))});return[
  t('plan_A','重訓A 上半身',[['bench',4,6],['seatrow',4,10],['dbpress',3,10],['latpd',3,10],['latraise',3,15],['pushdown',2,12]]),
  t('plan_B','重訓B 下半身',[['squat',4,6],['rdl',3,8],['bulg',3,10],['legcurl',3,12],['calf',3,15],['plank',3,1]]),
- t('plan_C','重訓C 全身',[['deadlift',3,5],['incdb',3,10],['pullup',3,8],['goblet',3,12],['facepull',3,15],['kbswing',3,15]])]}
+ t('plan_C','重訓C 全身',[['deadlift',3,5],['incdb',3,10],['pullup',3,8],['goblet',3,12],['facepull',3,15],['kbswing',3,15]]),
+ t('plan_HA','居家A 臀腿',[['bandsquat',3,15],['bandbridge',3,15],['bandrdl',3,12],['revlunge',3,10],['bandwalk',3,12],['firehyd',3,12],['bandkick',2,15]]),
+ t('plan_HB','居家B 上半身＋核心',[['bandrow',3,15],['kneepush',3,10],['bandpress',3,12],['bandpa',3,15],['bandcurl',3,12],['bandtri',3,12],['deadbug',3,10],['birddog',3,10]]),
+ t('plan_HC','居家C 全身',[['bwsquat',3,15],['bandrow',3,12],['bandthrust',3,15],['kneepush',3,10],['bwlunge',3,10],['bandabd',3,12],['sideplank',3,1],['plank',3,1]])]}
+function homePlan(){return[
+ {k:'w',tid:'plan_HA',opt:false,note:'3×10–15，RPE 6–7（最後 2–3 下有點吃力但姿勢不跑掉）；組間休 45–60 秒，約 30–40 分。彈力繩選「做到最後幾下會酸、但能控制回來」的磅數，太輕就換粗一條或縮短握距'},
+ {k:'c',ct:'快走',min:30,label:'快走 / 推嬰兒車散步',opt:false,note:'30 分輕鬆快走，能講話但有點喘；帶寶寶出門也算'},
+ {k:'w',tid:'plan_HB',opt:false,note:'3×10–15，RPE 6–7；跪姿伏地挺身做不到 10 下可改扶牆/扶桌。死蟲、鳥狗式慢慢做、下背貼地/不晃，每邊算 1 下'},
+ {k:'r',opt:false,note:'休息日：睡好、多喝水，可做 10 分伸展'},
+ {k:'w',tid:'plan_HC',opt:false,note:'全身 3×10–15，棒式／側棒式每組 20–40 秒（每邊），腰不塌；整份約 35–40 分'},
+ {k:'c',ct:'快走',min:20,label:'選做有氧',opt:true,note:'選做：20–30 分快走、跳舞或騎單車；太累就散步或休息'},
+ {k:'r',opt:false,note:'休息日：顧好睡眠，身體痠痛就輕鬆走走'}]}
+function addMissingTpls(){planTpls().forEach(t=>{if(!S.templates.some(x=>x.id===t.id))S.templates.push(t)})}
+function applyPlan(home){if(!confirm(home?'套用女生居家版週計畫？（會取代 7 天的安排，訓練紀錄與課表不會刪除）':'恢復標準版週計畫？（訓練紀錄與課表不會刪除）'))return;addMissingTpls();S.plan=home?homePlan():defPlan();S.planEdited={};save();render();toast(home?'已套用居家版':'已恢復標準版')}
 function defPlan(){return[
  {k:'w',tid:'plan_A',opt:false,note:'4×6–10，RPE 7–8（留 2–3 下），主項休 2–3 分、輔助 60–90 秒'},
  {k:'c',ct:'快走',min:35,label:'Zone 2 有氧',opt:false,note:'30–40 分，心率約 (220−年齡)×60–70%，能講話但唱不了歌。跑步機爬坡快走/飛輪/單車皆可'},
@@ -379,7 +395,8 @@ function defPlan(){return[
  {k:'r',opt:false,note:'休息日：睡好、補電解質（生酮/低碳特別重要）'},
  {k:'w',tid:'plan_C',opt:false,note:'全身 45–50 分，最後可加 10 分划船機/飛輪間歇'},
  {k:'c',ct:'飛輪',min:20,label:'短間歇',opt:true,note:'選做：熱身 5 分 → 30 秒衝刺 / 90 秒輕踩 ×6–8 → 緩和 5 分；太累就改 Zone 2'}]}
-function ensurePlan(){if(!Array.isArray(S.plan)||S.plan.length!==7){S.plan=defPlan();planTpls().forEach(t=>{if(!S.templates.some(x=>x.id===t.id))S.templates.push(t)})}
+function ensurePlan(){if(!Array.isArray(S.plan)||S.plan.length!==7){S.plan=defPlan()}
+ addMissingTpls();
  S.planGoal=S.planGoal||{min:4,max:6}}
 function isCardio(w){return w.kind==='cardio'}
 function slotName(p){if(!p)return'';if(p.k==='w'){const t=S.templates.find(x=>x.id===p.tid);return t?t.name:'重訓'}if(p.k==='c')return(p.label||'有氧')+'（'+(p.ct||'')+' '+(p.min||'')+' 分）';return'休息'}
@@ -514,6 +531,7 @@ function vPlan(){ensurePlan();const F=flexPlan(),I=F.I,g=S.planGoal.min,mx=S.pla
  <h2>本週清單</h2><div class="card">${sl.filter(s=>!s.p.opt).map(row).join('')}${sl.filter(s=>s.p.opt).map(row).join('')}${extra.map(w=>`<div class="list-item" style="min-height:44px"><span style="font-size:20px">✅</span><div class="sp small">${esc(wLabel(w))}（額外）</div></div>`).join('')}</div>
  <h2>剩下幾天建議排程</h2><div class="card">${F.days.length?F.days.map(d=>{const s=F.sched[d];return`<div class="list-item" style="min-height:44px"><b style="width:64px">週${DN[d]}${d===I.today?' 今天':''}</b><span class="sp ${s?'':'muted'}" ${s?`onclick="slotSheet(${s.i})" style="cursor:pointer"`:''}>${s?(s.p.k==='w'?'🏋️ ':'🏃 ')+esc(sName(s))+' <span class="muted">›</span>':'🛌 休息／可選做快走'}</span>${(S.planEdited||{})[d]?'<span class="tag">手動</span>':''}</div>`}).join(''):'<div class="small muted">本週已結束</div>'}
  ${I.n+Object.keys(F.sched).length<g?'<div class="small" style="color:#fbbf24;margin-top:6px">剩下的天數不夠排滿 4 次，能練幾次算幾次。</div>':''}</div>
+ <div class="row" style="gap:8px;margin-bottom:10px"><button class="btn full" onclick="applyPlan(1)">🏠 套用女生居家版週計畫</button><button class="btn full" onclick="applyPlan(0)">🏋️ 恢復標準版</button></div>
  <button class="btn full" style="margin-bottom:10px" onclick="showFixed=!showFixed;render()">${showFixed?'▲ 收起':'▼ 編輯週計畫範本（調整／交換）'}</button>
  ${showFixed?S.plan.map((p,i)=>`<div class="card" style="padding:10px"><div class="row"><b style="width:40px">週${DN[i]}</b><span class="sp small">${p.k==='w'?'🏋️':p.k==='c'?'🏃':'🛌'} ${esc(slotName(p))}${p.opt?' <span class="tag">選做</span>':''}${(S.planEdited||{})[i]?' <span class="tag">手動</span>':''}</span><button class="btn sm" onclick="editSlot(${i})">✏️ 調整</button></div>${p.note?`<div class="tiny" style="margin-top:4px">${esc(p.note)}</div>`:''}</div>`).join('')+`<div class="tiny" style="margin:-4px 2px 10px">手動調整過的日子（標「手動」）會優先照你的安排；其他日子依你實際練的自動重排。</div>
  <div class="field"><label>每週目標（最少 / 上限）</label><div class="row"><input type="number" inputmode="numeric" value="${g}" onchange="S.planGoal.min=Math.max(1,Math.min(7,+this.value||4));save();render()"><input type="number" inputmode="numeric" value="${mx}" onchange="S.planGoal.max=Math.max(S.planGoal.min,Math.min(7,+this.value||6));save();render()"></div></div>
@@ -534,7 +552,7 @@ function rSlot(){const{i,t}=slE;const p=S.plan[i];modal(`<div class="row"><h2 cl
  ${planTpls().some(x=>x.id===t.id)?`<button class="btn full" onclick="slReset()">↺ 恢復預設動作</button>`:''}`)}
 function slSwap(k){pickEx(id=>{slE.t.ex[k].id=id;rSlot()})}
 function slMove(k,d){const a=slE.t.ex,j=k+d;if(j<0||j>=a.length)return;[a[k],a[j]]=[a[j],a[k]];rSlot()}
-function slReset(){if(!confirm('恢復這個課表的預設動作與名稱？'))return;const d=planTpls().find(x=>x.id===slE.t.id);slE.t.name=d.name;slE.t.ex=d.ex;const dn=defPlan().find(x=>x.tid===d.id);if(dn)slE.note=dn.note;rSlot()}
+function slReset(){if(!confirm('恢復這個課表的預設動作與名稱？'))return;const d=planTpls().find(x=>x.id===slE.t.id);slE.t.name=d.name;slE.t.ex=d.ex;const dn=defPlan().concat(homePlan()).find(x=>x.tid===d.id);if(dn)slE.note=dn.note;rSlot()}
 function slSave(go_){const{i,t}=slE;const k=S.templates.findIndex(x=>x.id===t.id);if(k>=0)S.templates[k]=t;else S.templates.push(t);S.plan[i].note=slE.note;save();slE=null;closeModal();render();toast('已儲存');if(go_)startWorkout(t.id)}
 function cGuide(p){return /間歇/.test(p.label||'')?'熱身 5 分 → 30 秒衝刺（RPE 8–9）／90 秒輕鬆（RPE 3–4）× 6–8 輪 → 緩和 5 分。睡不好或腿很痠就改 Zone 2。':/快走|散步/.test(p.label||'')?'輕鬆快走 RPE 3–4，可推嬰兒車、帶寶寶散步；目的是活動恢復，不用喘。':'Zone 2：RPE 5–6，心率約 (220−年齡)×60–70%，能說完整句子但唱不了歌。跑步機斜坡快走、飛輪、單車、划船都可，30–40 分。'}
 function cSlot(i){const p=S.plan[i];modal(`<div class="row"><h2 class="sp" style="margin-top:0">🏃 ${esc(p.label||'有氧')}</h2><button class="btn sm" onclick="closeModal()">關閉</button></div>

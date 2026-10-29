@@ -204,7 +204,7 @@ function vSet(){const st=S.settings;return`<h1>設定</h1><div class="card">
  <button class="btn full" style="margin-bottom:8px" onclick="$('imp').click()">⬆️ 匯入備份</button><input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importJSON(this)">
  <button class="btn full" style="margin-bottom:8px" onclick="exportCSV()">📊 匯出 CSV（Excel 可開）</button>
  <button class="btn bad full" onclick="if(confirm('確定刪除所有資料？無法復原！')&&confirm('真的確定？')){localStorage.removeItem('${KEY}');load();render()}">🗑 清除全部資料</button></div>
- <p class="tiny" style="text-align:center;margin-top:16px">練多少 v1.9 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
+ <p class="tiny" style="text-align:center;margin-top:16px">練多少 v2.0 · 共 ${S.workouts.length} 次訓練 · 加到主畫面：Safari 分享 → 加入主畫面</p>`}
 function download(name,text,type){const b=new Blob([text],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
 function exportJSON(){download('workout-backup-'+dkey(Date.now())+'.json',JSON.stringify(S,null,1),'application/json');toast('已匯出備份')}
 function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.workouts))throw 0;if(!confirm('匯入會覆蓋目前資料，確定？'))return;localStorage.setItem(KEY,JSON.stringify(d));load();render();toast('匯入成功')}catch(e){alert('檔案格式錯誤')}};r.readAsText(f);inp.value=''}
@@ -372,7 +372,7 @@ const CTYPES=['跑步','快走','單車','飛輪','划船','跳繩','其他'];
 const DN='一二三四五六日';
 function planTpls(){const t=(id,name,ex)=>({id,name,ex:ex.map(e=>({id:e[0],n:e[1],w:0,r:e[2]}))});return[
  t('plan_A','重訓A 上半身',[['bench',4,6],['seatrow',4,10],['dbpress',3,10],['latpd',3,10],['latraise',3,15],['pushdown',2,12]]),
- t('plan_B','重訓B 下半身',[['squat',4,6],['rdl',3,8],['bulg',3,10],['legcurl',3,12],['calf',3,15],['plank',3,1]]),
+ t('plan_B','重訓B 下半身',[['squat',4,6],['rdl',3,8],['bulg',3,10],['legcurl',3,12],['calf',3,15],['legraise',3,10]]),
  t('plan_C','重訓C 全身',[['deadlift',3,5],['incdb',3,10],['pullup',3,8],['goblet',3,12],['facepull',3,15],['kbswing',3,15]]),
  t('plan_HA','居家A 臀腿',[['bandsquat',3,15],['bandbridge',3,15],['bandrdl',3,12],['revlunge',3,10],['bandwalk',3,12],['firehyd',3,12],['bandkick',2,15]]),
  t('plan_HB','居家B 上半身＋核心',[['bandrow',3,15],['kneepush',3,10],['bandpress',3,12],['bandpa',3,15],['bandcurl',3,12],['bandtri',3,12],['deadbug',3,10],['birddog',3,10]]),
@@ -397,6 +397,7 @@ function defPlan(){return[
  {k:'c',ct:'飛輪',min:20,label:'短間歇',opt:true,note:'選做：熱身 5 分 → 30 秒衝刺 / 90 秒輕踩 ×6–8 → 緩和 5 分；太累就改 Zone 2'}]}
 function ensurePlan(){if(!Array.isArray(S.plan)||S.plan.length!==7){S.plan=defPlan()}
  addMissingTpls();
+ {const b=S.templates.find(x=>x.id==='plan_B');if(b&&!S.migB20){const i=b.ex.findIndex(e=>e.id==='plank');if(i>=0)b.ex[i]={id:'legraise',n:'懸垂舉腿',w:0,r:10};S.migB20=1;save()}}
  S.planGoal=S.planGoal||{min:4,max:6}}
 function isCardio(w){return w.kind==='cardio'}
 function slotName(p){if(!p)return'';if(p.k==='w'){const t=S.templates.find(x=>x.id===p.tid);return t?t.name:'重訓'}if(p.k==='c')return(p.label||'有氧')+'（'+(p.ct||'')+' '+(p.min||'')+' 分）';return'休息'}
